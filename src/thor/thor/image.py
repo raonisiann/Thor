@@ -212,7 +212,7 @@ class Image:
             'print(\'setting hostname to --->> {}\'.format(host_name))',
             '',
             'os.system(r\'hostnamectl set-hostname {}\'.format(host_name))',
-            'os.system(r\'sed --in-place "s/127.0.0.1\slocalhost/127.0.0.1 localhost {}/" /etc/hosts\'.format(host_name)) # noqa: E501',
+            'os.system(r\'sed --in-place "s/127.0.0.1\\slocalhost/127.0.0.1 localhost {}/" /etc/hosts\'.format(host_name)) # noqa: E501, W605',
             '',
         ]
         return '\n'.join(content)
