@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-
+from .__version__ import __version__
 from . import (
     aws_instances,
     configure,
@@ -13,6 +13,8 @@ from . import (
     setup,
     stack
 )
+
+THOR_VERSION = __version__
 
 SUB_MODULES = {
     'configure': {
@@ -64,7 +66,9 @@ SUB_MODULES = {
 
 
 def build_main_help_text():
-    help_text = 'Thor Infrastructure Tools v0.1\n\n'
+    help_text = 'Thor {version}\n\n'.format(
+        version=THOR_VERSION
+    )
     help_text += 'Available Modules:\n\n'
 
     for name, value in SUB_MODULES.items():
