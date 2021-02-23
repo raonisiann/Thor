@@ -1,7 +1,7 @@
 # Global defaults
 ROOT_DIR=$(shell pwd)
 SRC_DIR=$(ROOT_DIR)/src
-DIST_PACKAGES_DIR=$(ROOT_DIR)/dist-packages
+DIST_DIR=$(ROOT_DIR)/dist
 BIN_DIR=$(ROOT_DIR)/bin
 # Python
 PYTHON=$(shell which python3)
@@ -19,21 +19,28 @@ install: install-thor
 
 test: test-thor
 
-release: build-thor install-thor test-thor
+dist: dist-thor
 
 clean: clean-thor
 
-build-thor:
+release: clean-thor dist-thor test-thor
+
+dependencies:
+	$(PYTHON) -m pip install --user boto3
+	$(PYTHON) -m pip install --user requests
+	$(PYTHON) -m pip install --user build
+
+dist-thor: dependencies
+	@echo 'Running dist process...'
+	cd $(THOR_SRC_DIR) && $(PYTHON) -m build --sdist --wheel --outdir $(DIST_DIR) .
+
+build-thor: dependencies
 	@echo 'Building Thor...'
-	$(PYTHON) -m pip install boto3
-	$(PYTHON) -m pip install requests
-	cd $(THOR_SRC_DIR) && $(PYTHON) setup.py --verbose build
+	cd $(THOR_SRC_DIR) && $(PYTHON) -m build
 
 install-thor:
 	@echo 'Installing Thor...'
-	mkdir -p $(PYTHON_LIB_DIR)
-	mkdir -p $(BIN_DIR)
-	cd $(THOR_SRC_DIR) && $(PYTHON) setup.py --verbose install --prefix=$(DIST_PACKAGES_DIR) --install-scripts=$(BIN_DIR)
+	$(PYTHON) -m pip install --user --force-reinstall $(DIST_DIR)/$(shell ls $(DIST_DIR) | grep thor-*[0-9].[0-9].[0-9].tar.gz)
 
 test-thor:
 	@echo 'Running tests...'
@@ -42,7 +49,5 @@ test-thor:
 clean-thor:
 	@echo 'Cleanning Thor...'
 	rm -rf $(THOR_SRC_DIR)/build/*
-	rm -rf $(THOR_SRC_DIR)/dist/*
-	rm -rf $(DIST_PACKAGES_DIR)/*
 	rm -rf $(THOR_SRC_DIR)/thor.egg-info
-	rm -rf $(BIN_DIR)/$(THOR_EXEC_NAME)
+	rm -rf $(DIST_DIR)/*
