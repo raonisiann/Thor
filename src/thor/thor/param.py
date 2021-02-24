@@ -17,6 +17,10 @@ class Param:
 
     def __init__(self, env):
         self.env = env
+        self.__ssm_client = self.env.aws_client('ssm')
+
+    def ssm_client(self):
+        return self.__ssm_client
 
     def get_full_param_name(self, input_name):
         param_env_prefix = '/{}/'.format(self.env.Name())
@@ -38,10 +42,9 @@ class Param:
 
     def create_param(self, name, value, param_type):
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.put_parameter(
+            response = self.ssm_client().put_parameter(
                 Name=param_name,
                 Value=value,
                 Type=param_type
@@ -49,7 +52,7 @@ class Param:
             if 'Version' in response:
                 return response['Version']
             return False
-        except ssm.exceptions.ParameterAlreadyExists:
+        except self.ssm_client().exceptions.ParameterAlreadyExists:
             print('Param {} already exist on environment {}'.format(
                 param_name,
                 self.env.Name()
@@ -64,15 +67,14 @@ class Param:
 
     def delete_param(self, name):
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.delete_parameter(
+            response = self.ssm_client().delete_parameter(
                 Name=param_name
             )
             if response:
                 return True
-        except ssm.exceptions.ParameterNotFound:
+        except self.ssm_client().exceptions.ParameterNotFound:
             return None
         except Exception as err:
             raise Exception('fail to describe parameter with error: {}'.format(
@@ -84,15 +86,14 @@ class Param:
 
     def describe_param(self, name):
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.get_parameter(
+            response = self.ssm_client().get_parameter(
                 Name=param_name,
                 WithDecryption=False
             )
             return response['Parameter']
-        except ssm.exceptions.ParameterNotFound:
+        except self.ssm_client().exceptions.ParameterNotFound:
             return None
         except Exception as err:
             raise Exception('fail to describe parameter with error: {}'.format(
@@ -104,15 +105,14 @@ class Param:
 
     def get_param(self, name):
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.get_parameter(
+            response = self.ssm_client().get_parameter(
                 Name=param_name,
                 WithDecryption=False
             )
             return response['Parameter']['Value']
-        except ssm.exceptions.ParameterNotFound:
+        except self.ssm_client().exceptions.ParameterNotFound:
             return None
         except Exception as err:
             print('Something went wrong: {}'.format(str(err)))
@@ -124,11 +124,10 @@ class Param:
         param_path = '/{env}'.format(
             env=self.env.Name()
         )
-        ssm = self.env.aws_client('ssm')
 
         try:
             result_parameters = []
-            response = ssm.get_parameters_by_path(
+            response = self.ssm_client().get_parameters_by_path(
                 Path=param_path,
                 Recursive=True,
                 WithDecryption=False
@@ -137,7 +136,7 @@ class Param:
                 result_parameters.append(p['Name'])
 
             while 'NextToken' in response:
-                response = ssm.get_parameters_by_path(
+                response = self.ssm_client().get_parameters_by_path(
                     Path=param_path,
                     Recursive=True,
                     WithDecryption=False,
@@ -159,10 +158,9 @@ class Param:
             )
 
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.put_parameter(
+            response = self.ssm_client().put_parameter(
                 Name=param_name,
                 Value=value,
                 Overwrite=True,
@@ -182,10 +180,9 @@ class Param:
 
     def update_param(self, name, value):
         param_name = self.get_full_param_name(name)
-        ssm = self.env.aws_client('ssm')
 
         try:
-            response = ssm.put_parameter(
+            response = self.ssm_client().put_parameter(
                 Name=param_name,
                 Value=value,
                 Overwrite=True
