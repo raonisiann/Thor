@@ -37,10 +37,13 @@ class Param:
 
         return param_name
 
-    def create(self, name, value, param_type='String'):
+    def create(self, name, value, param_type=Param.STRING_TYPE):
         return self.create_param(name, value, param_type)
 
     def create_param(self, name, value, param_type):
+        if not param_type == Param.STRING_TYPE:
+            raise ParamTypeNotSupportedException()
+
         param_name = self.get_full_param_name(name)
 
         try:
@@ -153,9 +156,7 @@ class Param:
 
     def update_or_create(self, name, value, param_type=Param.STRING_TYPE):
         if not param_type == Param.STRING_TYPE:
-            raise ParamTypeNotSupportedException(
-                'Only String type is supported right now.'
-            )
+            raise ParamTypeNotSupportedException()
 
         param_name = self.get_full_param_name(name)
 
