@@ -68,10 +68,7 @@ class Param:
             if response:
                 return True
         except ssm.exceptions.ParameterNotFound:
-            print('Param {} does not exist on environment {}'.format(
-                param_name,
-                self.env.Name()
-            ))
+            return None
         except Exception as err:
             raise Exception('fail to describe parameter with error: {}'.format(
                 str(err)
@@ -91,10 +88,7 @@ class Param:
             )
             return response['Parameter']
         except ssm.exceptions.ParameterNotFound:
-            print('Param {} does not exist on environment {}'.format(
-                param_name,
-                self.env.Name()
-            ))
+            return None
         except Exception as err:
             raise Exception('fail to describe parameter with error: {}'.format(
                 str(err)
@@ -114,10 +108,6 @@ class Param:
             )
             return response['Parameter']['Value']
         except ssm.exceptions.ParameterNotFound:
-            print('Param {} does not exist on environment {}'.format(
-                param_name,
-                self.env.Name()
-            ))
             return None
         except Exception as err:
             print('Something went wrong: {}'.format(str(err)))
