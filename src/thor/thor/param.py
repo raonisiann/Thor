@@ -5,10 +5,15 @@ from .env import Env
 class ParamException(Exception):
     pass
 
+class ParamTypeNotSupportedException(Exception):
+    pass
+
 
 class Param:
 
     THOR_PARAM_NAMESPACE = '{env}/thor'
+
+    STRING_TYPE = 'String'
 
     def __init__(self, env):
         self.env = env
@@ -146,6 +151,31 @@ class Param:
         except Exception as err:
             print('{}'.format(str(err)))
             exit(-1)
+
+    def update_or_create(self, name, value, param_type=Param.STRING_TYPE):
+        if not param_type == Param.STRING_TYPE:
+            raise ParamTypeNotSupportedException(
+                'Only String type is supported right now.'
+            )
+
+        param_name = self.get_full_param_name(name)
+        ssm = self.env.aws_client('ssm')
+
+        try:
+            response = ssm.put_parameter(
+                Name=param_name,
+                Value=value,
+                Overwrite=True,
+                Type=param_type
+            )
+            if 'Version' in response:
+                return response['Version']
+            return False
+
+        except Exception as err:
+            raise Exception('Fail to create parameter with error: {}'.format(
+                str(err)
+            ))
 
     def update(self, name, value):
         return self.update_param(name, value)
