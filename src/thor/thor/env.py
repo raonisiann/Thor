@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from .aws import Aws
+from .config import Config
 
 
 class EnvException(Exception):
@@ -14,28 +15,16 @@ class Env:
     CONFIG_FILE_PATH = '{env_dir}/config.json'
 
     def __init__(self, name=None):
-        self.config = {}
         self.name = name
         self.path = '{base}/{env}'.format(
             base=Env.ROOT_FOLDER,
             env=self.name
         )
+        self.__config = Config(Env.CONFIG_FILE_PATH.format(env_dir=self.path))
         self.__saved_dir = None
-        self.__load_config()
 
-    def __load_config(self):
-        config_file_path = self.get_config_file_path()
-        config_json = ""
-
-        if os.path.exists(self.get_config_file_path()):
-            with open(config_file_path) as f:
-                config_json = json.loads(f.read())
-
-            for name, value in config_json.items():
-                self.config[name] = value
-
-    def Config(self):
-        return self.config
+    def config(self):
+        return self.__config
 
     def Name(self):
         return self.name
@@ -44,21 +33,11 @@ class Env:
         return self.path
 
     def aws_client(self, service):
-        region = self.get_config('aws_region')
+        region = self.config().get('aws_region')
         profile = self.get_name()
 
         aws = Aws(region, profile)
         return aws.client(service)
-
-    def get_config(self, name):
-
-        if name in self.config:
-            return self.config[name]
-
-        return None
-
-    def set_config(self, name, value):
-        self.config[name] = value
 
     def is_valid(self):
         if self.name is None:
@@ -114,11 +93,6 @@ class Env:
 
     def get_env_path(self):
         return self.path
-
-    def get_config_file_path(self):
-        return Env.CONFIG_FILE_PATH.format(
-            env_dir=self.get_env_path()
-        )
 
     def __enter__(self):
         self.__saved_dir = os.getcwd()
