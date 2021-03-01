@@ -23,8 +23,7 @@ class TestAws(TestCase):
             except StopIteration:
                 return {}
 
-        aws = Aws('test_region')
-        result = aws.with_tokenized_method(fake_call, 'Test')
+        result = Aws.with_tokenized_method(fake_call, 'Test')
         self.assertListEqual(result, [{'test_key': 'test_value'}])
 
     def test_with_tokenized_method_next_token(self):
@@ -54,8 +53,7 @@ class TestAws(TestCase):
             except StopIteration:
                 return {}
 
-        aws = Aws('test_region')
-        result = aws.with_tokenized_method(fake_call, 'Test')
+        result = Aws.with_tokenized_method(fake_call, 'Test')
         self.assertListEqual(result, [{'test_key': 'test_value'}, {'test_key_2': 'test_value_2'}])
 
 
@@ -74,8 +72,7 @@ class TestAws(TestCase):
             except StopIteration:
                 return {}
 
-        aws = Aws('test_region')
-        result = aws.with_tokenized_method(fake_call, 'Test')
+        result = Aws.with_tokenized_method(fake_call, 'Test')
         self.assertListEqual(result, [])
 
 
@@ -98,6 +95,5 @@ class TestAws(TestCase):
             except StopIteration:
                 return {}
 
-        aws = Aws('test_region')
         with self.assertRaises(AwsClientException):
-            aws.with_tokenized_method(fake_call, 'Unknow')
+            Aws.with_tokenized_method(fake_call, 'Unknow')

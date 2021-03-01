@@ -13,7 +13,8 @@ class Aws:
         self.region = region
         self.profile = profile
 
-    def with_tokenized_method(self, func, key, **kwargs):
+    @staticmethod
+    def with_tokenized_method(func, key, **kwargs):
         results = []
         response = func(**kwargs)
 
