@@ -14,6 +14,8 @@ class Env:
     ROOT_FOLDER = '{}/environments'.format(os.getcwd())
     CONFIG_FILE_PATH = '{env_dir}/config.json'
 
+    __AWS_CLIENT_CACHE = {}
+
     def __init__(self, name=None):
         self.name = name
         self.path = '{base}/{env}'.format(
@@ -35,9 +37,12 @@ class Env:
     def aws_client(self, service):
         region = self.config().get('aws_region')
         profile = self.get_name()
+        key = '{}.{}'.format(region, service)
 
-        aws = Aws(region, profile)
-        return aws.client(service)
+        if key not in Env.__AWS_CLIENT_CACHE:
+            aws = Aws(region, profile)
+            Env.__AWS_CLIENT_CACHE[key] = aws.client(service)
+        return Env.__AWS_CLIENT_CACHE[key]
 
     def is_valid(self):
         if self.name is None:
