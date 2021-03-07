@@ -1,6 +1,20 @@
+import time
+
+
+class AwsResourceTimeoutException(Exception):
+    pass
+
+
+class AwsResourceParameterException(Exception):
+    pass
 
 
 class AwsResource:
+
+    MAX_RETRY_INTERVAL_SECONDS = 60
+    MAX_TIMEOUT_SECONDS = 1800
+    MIN_RETRY_INTERVAL_SECONDS = 1
+    MIN_TIMEOUT_SECONDS = 1
 
     def __init__(self, name, env):
         self.name = name
@@ -13,10 +27,59 @@ class AwsResource:
         return self.__client
 
     def output_status(self, status):
-    """
-    Output Resource current status to /dev/stdout
-    """
+        '''
+        Output Resource current status to /dev/stdout
+        '''
         print('[{resource_group}] {status}'.format(
             resource_group=self.name,
             status=status
         ))
+
+    def wait_for(self, retry_interval, timeout, func, *args, **kwargs):
+        '''
+        Wait until the resource reaches a particular states. That happens
+        by checking the result of 'func'. The cycle ends when 'func' returns
+        a 'True' logical value.
+
+        Parameters:
+            retry_interval (int): Retry interval in seconds between calls to 'func'.
+            timeout (int): Max time in seconds that 'func' has to return True.
+            func (callable): Callable object
+            args (*args): 'func' positional args
+            kwargs (**kwargs): 'func' key word args
+
+        Returns:
+            bool: True if 'func' ends before the timeout
+        '''
+        if retry_interval < AwsResource.MIN_RETRY_INTERVAL_SECONDS or retry_interval > AwsResource.MAX_RETRY_INTERVAL_SECONDS:
+            raise AwsResourceParameterException(
+                'Invalid retry_interval value must be => {} and <= {}'.format(
+                    AwsResource.MIN_RETRY_INTERVAL_SECONDS,
+                    AwsResource.MAX_RETRY_INTERVAL_SECONDS
+                )
+            )
+        if timeout < AwsResource.MIN_TIMEOUT_SECONDS or timeout > AwsResource.MAX_TIMEOUT_SECONDS:
+            raise AwsResourceParameterException(
+                'Invalid timeout value must be => {} and <= {}'.format(
+                    AwsResource.MIN_TIMEOUT_SECONDS,
+                    AwsResource.MAX_TIMEOUT_SECONDS
+                )
+            )
+        time_start = time.time()
+        while True:
+            try:
+                result = func(*args, **kwargs)
+            except Exception as ex:
+                raise ex
+            if result:
+                break
+            if int(time.time() - time_start) >= timeout:
+                raise AwsResourceTimeoutException(
+                    'Function {} timed out after {} seconds'.format(
+                        func.__name__,
+                        timeout
+                    )
+                )
+            output_status('Waiting {} seconds for next attemp...'.format(retry_interval))
+            time.sleep(retry_interval)
+        return True

@@ -4,6 +4,7 @@ from thor.aws_resources.aws_resource import AwsResource
 class AutoScalingException(Exception):
     pass
 
+
 class AutoScalingActivityInProgress(Exception):
     pass
 
@@ -12,6 +13,51 @@ class AutoScaling(AwsResource):
 
     def __init__(self, env):
         super().__init__('autoscaling', env)
+
+    def __parse_params(self, **params):
+        parsed_config = {}
+
+        if 'name' in params:
+            parsed_config['AutoScalingGroupName'] = params['name']
+
+        if 'names' in params:
+            parsed_config['AutoScalingGroupNames'] = params['names']
+
+        if 'launch_template_name' in params:
+            parsed_config['LaunchTemplate'] = {}
+            parsed_config['LaunchTemplate']['LaunchTemplateName'] = params['launch_template_name']
+
+        if 'min_size' in params:
+            parsed_config['MinSize'] = params['min_size']
+
+        if 'max_size' in params:
+            parsed_config['MaxSize'] = params['max_size']
+
+        if 'desired_capacity' in params:
+            parsed_config['DesiredCapacity'] = params['desired_capacity']
+
+        if 'defaul_cooldown' in params:
+            parsed_config['DefaultCooldown'] = params['default_cooldown']
+
+        if 'availability_zones' in params:
+            parsed_config['AvailabilityZones'] = params['availability_zones']
+
+        if 'target_group_arn' in params:
+            parsed_config['TargetGroupARNs'] = [params['target_group_arn']]
+
+        if 'health_check_type' in params:
+            parsed_config['HealthCheckType'] = params['health_check_type']
+
+        if 'health_check_grace_period' in params:
+            parsed_config['HealthCheckGracePeriod'] = params['health_check_grace_period']
+
+        if 'vpc_zone_identifier' in params:
+            parsed_config['VPCZoneIdentifier'] = params['vpc_zone_identifier']
+
+        if 'tags' in params:
+            parsed_config['Tags'] = params['tags']
+
+        return parsed_config
 
     def __is_instance_health(self, instance):
         health_status = instance['HealthStatus']
@@ -22,27 +68,19 @@ class AutoScaling(AwsResource):
         else:
             return False
 
-    def __wait_for_ready_state(self, name, desired_capacity, wait_seconds=10):
-        output_status('Waiting instances to become available...')
+    def __check_instance_ready_state(self, name, desired_capacity):
+        asg = self.read(name)
+        current_capacity = 0
 
-        while True:
-            asg = self.read(name)
-            current_capacity = 0
+        if 'Instances' in asg:
+            for instance in asg['Instances']:
+                if self.__is_instance_health(instance):
+                    current_capacity += 1
+        output_status('Current capacity = {}'.format(current_capacity))
+        output_status('Desired capacity = {}'.format(desired_capacity))
 
-            if 'Instances' in asg:
-                for instance in asg['Instances']:
-                    if self.__is_instance_health(instance)
-                        current_capacity += 1
-
-            output_status('Current capacity = {}'.format(current_capacity))
-            output_status('Desired capacity = {}'.format(desired_capacity))
-
-            if desired_capacity == current_capacity:
-                break
-            output_status('Waiting {} seconds...'.format(wait_seconds))
-            time.sleep(wait_seconds)
-
-        output_status('Instances available.')
+        if desired_capacity == current_capacity:
+            return True
 
     def __terminate_autoscaling_instance(self, instance_id):
         try:
@@ -93,31 +131,19 @@ class AutoScaling(AwsResource):
         output_status('Instances terminated')
 
     def create(self, name, launch_template_name, min_size,
-               max_size, desired_capacity, default_cooldown,
-               availability_zones, target_group_arn, health_check_type,
-               health_check_grace_period, vpc_zone_identifier, tags):
+               max_size, desired_capacity, default_cooldown=None,
+               availability_zones=None, target_group_arn=None, health_check_type=None,
+               health_check_grace_period=None, vpc_zone_identifier=None, tags=None):
+        saved_params = locals()
         try:
             output_status('Creating {}...'.format(name))
             response = self.client().create_auto_scaling_group(
-                AutoScalingGroupName=name,
-                LaunchTemplate={
-                    'LaunchTemplateName': launch_template
-                },
-                MinSize=min_size,
-                MaxSize=max_size,
-                DesiredCapacity=desired_capacity,
-                DefaultCooldown=default_cooldown,
-                AvailabilityZones=availability_zones,
-                TargetGroupARNs=[
-                    target_group_arn
-                ],
-                HealthCheckType=health_check_type,
-                HealthCheckGracePeriod=health_check_grace_period,
-                VPCZoneIdentifier=vpc_zone_identifier,
-                Tags=tags
+                self.__parse_params(**saved_params)
             )
             # wait for autoscaling and instance lifecycle completes
-            self.__wait_for_ready_state(name, desired_capacity)
+            output_status('Waiting instances to become available...')
+            self.wait_for(5, 1200, self.__check_instance_ready_state, name, desired_capacity)
+            output_status('Instances available.')
             output_status('Created')
         except self.client().exceptions.AlreadyExistsFault as err:
             raise AutoScalingException(str(err))
@@ -129,6 +155,7 @@ class AutoScaling(AwsResource):
             raise AutoScalingException(str(err))
 
     def destroy(self, name):
+        saved_params = locals()
         seconds_to_wait_for_autoscaling_activity = 30
         output_status('Terminating {}...'.format(name))
 
@@ -144,11 +171,11 @@ class AutoScaling(AwsResource):
             try:
                 output_status('Destroying {}...'.format(name))
                 self.client().delete_auto_scaling_group(
-                    AutoScalingGroupName=name
+                    self.__parse_params(**saved_params)
                 )
                 scale_event_in_progress = False
             except self.client().exceptions.ScalingActivityInProgressFault:
-                output_status('Activity in progress. Can\'t delete.'
+                output_status('Activity in progress. Can\'t delete.')
                 output_status('Waiting {} seconds for next attempt...'.format(
                     seconds_to_wait_for_autoscaling_activity
                 ))
@@ -159,10 +186,11 @@ class AutoScaling(AwsResource):
                 raise AutoScalingException(str(err))
         output_status('{} destroyed.'.format(name))
 
-    def read(self, name):
+    def read(self, names):
+        saved_params = locals()
         try:
             response = self.client().describe_auto_scaling_groups(
-                AutoScalingGroupNames=[name]
+                self.__parse_params(**saved_params)
             )
 
             if 'AutoScalingGroups' not in response:
@@ -174,48 +202,18 @@ class AutoScaling(AwsResource):
         except self.client().exceptions.ResourceContentionFault as err:
             raise AutoScalingException(str(err))
 
-    def update(self, name, launch_template_name='', min_size='',
-               max_size='', desired_capacity='', default_cooldown='',
-               availability_zones=[], health_check_type='',
-               health_check_grace_period='', vpc_zone_identifier='')
-        config = {}
-
-        if launch_template_name:
-            config['LaunchTemplate'] = {}
-            config['LaunchTemplate']['LaunchTemplateName'] = launch_template_name
-
-        if str(min_size):
-            config['MinSize'] = min_size
-
-        if str(max_size):
-            config['MaxSize'] = max_size
-
-        if str(desired_capacity):
-            config['DesiredCapacity'] = desired_capacity
-
-        if str(defaul_cooldown):
-            config['DefaultCooldown'] = default_cooldown
-
-        if availability_zones:
-            config['AvailabilityZones'] = availability_zones
-
-        if health_check_type:
-            config['HealthCheckType'] = health_check_type
-
-        if health_check_grace_period:
-            config['HealthCheckGracePeriod'] = health_check_grace_period
-
-        if vpc_zone_identifier:
-            config['VPCZoneIdentifier'] = vpc_zone_identifier
-
+    def update(self, name, launch_template_name=None, min_size=None,
+               max_size=None, desired_capacity=None, default_cooldown=None,
+               availability_zones=None, health_check_type=None,
+               health_check_grace_period=None, vpc_zone_identifier=None):
+        saved_params = locals()
         try:
             output_status('Updating {}...'.format(name))
             for k, v in config:
                 output_status('setting: {} = {}'.format(k, v))
 
             response = self.client().update_auto_scaling_group(
-                AutoScalingGroupName=name,
-                **config
+                self.__parse_params(**saved_params)
             )
             output_status('{} updated.'.format(name))
         except self.client().exceptions.ScalingActivityInProgressFault as err:
