@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 from .__version__ import __version__
 from . import (
     aws_instances,
@@ -88,6 +89,8 @@ def run():
 
     You SHOULD NOT write any business logic here.
     '''
+
+    logging.basicConfig(level=logging.INFO)
 
     main_parser = argparse.ArgumentParser(
         prog='thor',
