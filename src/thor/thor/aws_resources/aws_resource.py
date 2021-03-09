@@ -35,6 +35,21 @@ class AwsResource:
             status=status
         ))
 
+    def tokenized(func, key, **kwargs):
+        results = []
+        response = func(**kwargs)
+
+        if response and key not in response:
+            raise AwsClientException(
+                '{} does not exist in response'.format(key)
+            )
+        [results.append(v) for v in response[key] if v]
+
+        while 'NextToken' in response and response['NextToken']:
+            response = func(NextToken=response['NextToken'], **kwargs)
+            [results.append(v) for v in response[key] if v]
+        return results
+
     def wait_for(self, retry_interval, timeout, func, *args, **kwargs):
         '''
         Wait until the resource reaches a particular states. That happens
