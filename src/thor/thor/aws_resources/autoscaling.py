@@ -186,6 +186,25 @@ class AutoScaling(AwsResource):
                 raise AutoScalingException(str(err))
         output_status('{} destroyed.'.format(name))
 
+    def discover(self, name):
+        try:
+            filters = [
+                {
+                    'Name': 'key',
+                    'Values': ['Name']
+                },
+                {
+                    'Name': 'value',
+                    'Values': [name]
+                }
+            ]
+            return self.tokenized(self.client().describe_tags,
+                                  'Tags', Filters=filters)
+        except self.client().exceptions.InvalidNextToken as err:
+            raise AutoScalingException(str(err))
+        except self.client().exceptions.ResourceContentionFault as err:
+            raise AutoScalingException(str(err))
+
     def read(self, names):
         saved_params = locals()
         try:

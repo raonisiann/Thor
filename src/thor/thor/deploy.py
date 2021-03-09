@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-
+import abc
 import argparse
 import datetime
 import time
+from thor.utils.names_generator import random_string
 from .env import Env
 from .image import Image
 from .param import Param
+from .aws import Aws
 
 
 class DeployException(Exception):
@@ -89,76 +91,68 @@ class DeployLock:
         self.release()
 
 
-class Deploy:
+class DeployAutoScalingConfig:
+
+    def __init__(self, image):
+        self.__image = image
+        self.description = ""
+        self.ami_id = ""
+        self.instance_type = ""
+        self.key_pair = ""
+        self.availability_zone_names = []
+        self.subnet_ids = []
+        self.lb_target_group = ""
+        self.health_check = None
+        self.min_capacity = 1
+        self.max_capacity = 1
+        self.desired_capacity = 1
+
+    def __load_config(self):
+        asg_settings = self.__image.env.config().get('auto_scaling_settings')
+        for name, value in asg_settings.items():
+            if name in self.__dict__:
+                self.__setattr__(name, value)
+            else:
+                print('WARNING: Invalid config "{}"'.format(name))
+
+    def generate_asg_name(self):
+        template_name = 'ASG_{image}_{env}_{random}'
+        return template_name.format(
+            image=self.image.get_name(),
+            env=self.image.env.get_name(),
+            random=random_string()
+        )
+
+    def generate_config_dict(self):
+        config_dict = {}
+        for name, value in self.__dict__:
+            if value:
+                config_dict[name] = value
+        return config_dict
+
+
+class Deploy(object):
+
+    __metaclass__ = abc.ABCMeta
 
     def __init__(self, image):
         self.image = image
-        self.deploy_strategy = 'blue_green'
+        self.asg_settings = DeployAutoScalingConfig(image)
+        self.__asg_client = None
         self.current_state = {}
         self.created_resources = []
 
-    def attach_auto_scaling_group_to_target_group(self):
-        pass
+    @abc.abstractmethod
+    def abort(self):
+        return
 
-    def dettach_auto_scaling_group_from_target_group(self):
-        pass
 
-    def create_auto_scaling_group(self, asg_data):
-        asg_client = self.image.env.aws_client('autoscaling')
+class DeployBlueGreen(Deploy):
 
-        try:
-            print('Creating Auto Scaling group {}...'.format(
-                asg_data['AutoScalingGroupName']
-            ))
-            asg_client.create_auto_scaling_group(
-                **asg_data
-            )
-            self.created_resources.append({
-                'name': 'auto_scaling_group',
-                'data': asg_data['AutoScalingGroupName']
-            })
-            print('Auto Scaling group created.')
-        except Exception as err:
-            raise DeployException(str(err))
+    def __init__(self, image):
+        super().__init__(image)
 
-    def create_launch_template(self, name, launch_template_data):
-        ec2 = self.image.env.aws_client('ec2')
-
-        try:
-            print('Creating Launch Template {}...'.format(
-                name
-            ))
-            response = ec2.create_launch_template(
-                LaunchTemplateName=name,
-                LaunchTemplateData=launch_template_data
-            )
-
-            if 'LaunchTemplate' in response:
-                self.created_resources.append({
-                    'name': 'launch_template',
-                    'data': response['LaunchTemplate']['LaunchTemplateName']
-                })
-                return response['LaunchTemplate']['LaunchTemplateName']
-            print('Launch Template created')
-        except Exception as err:
-            raise DeployException(str(err))
-
-    def delete_launch_template(self, name):
-        ec2 = self.image.env.aws_client('ec2')
-
-        try:
-            print('Deleting Launch Template {}...'.format(name))
-            ec2.delete_launch_template(
-                LaunchTemplateName=name
-            )
-            print('Launch Template deleted')
-        except ec2.exceptions.ResourceInUseFault:
-            raise DeployException('Fail to delete launch template.'
-                                  'Resource in use')
-        except ec2.exceptions.ResourceContentionFault as err:
-            raise DeployException(str(err))
-
-    def do_blue_green_deploy_abort(self):
+    def abort(self):
         print('Aborting deploy...')
         exit(-1)
 
@@ -256,159 +250,17 @@ class Deploy:
             if resource['name'] == 'auto_scaling_group':
                 self.terminate_auto_scaling_group(resource['data'])
 
-    def get_auto_scaling_group_by_name(self, asg_name):
-        asg_client = self.image.env.aws_client('autoscaling')
-
-        try:
-            response = asg_client.describe_auto_scaling_groups(
-                AutoScalingGroupNames=[asg_name]
-            )
-
-            if 'AutoScalingGroups' not in response:
-                raise DeployException('No AutoScaling groups were found')
-
-            if len(response['AutoScalingGroups']) == 1:
-                return response['AutoScalingGroups'][0]
-            return response['AutoScalingGroups']
-        except Exception as err:
-            raise DeployException(str(err))
-
-    def get_launch_template_by_name(self, launch_template_name):
-        ec2 = self.image.env.aws_client('ec2')
-
-        try:
-            response = ec2.describe_launch_template_versions(
-                LaunchTemplateName=launch_template_name,
-                Versions=[
-                    '$Latest'
-                ]
-            )
-
-            if 'LaunchTemplateVersions' not in response:
-                raise DeployException('No Launch templates were found')
-
-            return response['LaunchTemplateVersions'][0]
-        except Exception as err:
-            raise DeployException(str(err))
-
-    def terminate_auto_scaling_group(self, name):
-        print('Terminating Auto Scaling group {}...'.format(name))
-
-        asg = self.get_auto_scaling_group_by_name(name)
-        seconds_between_termination_requests = 5
-        interval_check_seconds = 30
-        target_capacity = 0
-        current_capacity = asg['DesiredCapacity']
-        asg_client = self.image.env.aws_client('autoscaling')
-
-        print('Setting ASG minSize to 0...')
-        asg_client.update_auto_scaling_group(
-            AutoScalingGroupName=name,
-            MinSize=0
-        )
-        print('ASG minSize=0 done.')
-
-        while current_capacity != target_capacity:
-            non_terminated = 0
-            for i in asg['Instances']:
-                # send terminate request to all 'InService' instances
-                if i['LifecycleState'] == 'InService':
-                    try:
-                        asg_client.terminate_instance_in_auto_scaling_group(
-                            InstanceId=i['InstanceId'],
-                            ShouldDecrementDesiredCapacity=True
-                        )
-                        print('Auto Scaling group instance '
-                              'termination request sent.')
-                    except Exception as err:
-                        raise DeployException(str(err))
-                    print('Waiting {} seconds before send '
-                          'another termination request.'.format(
-                                seconds_between_termination_requests
-                          ))
-                    time.sleep(seconds_between_termination_requests)
-                if i['LifecycleState'] != 'Terminated':
-                    non_terminated += 1
-
-            asg = self.get_auto_scaling_group_by_name(name)
-            current_capacity = asg['DesiredCapacity']
-
-            print('Capacity {} --> {}'.format(
-                current_capacity,
-                target_capacity
-            ))
-            # collect instance status summary
-            instance_status_summary = {}
-
-            for i in asg['Instances']:
-                state = i['LifecycleState']
-                if state in instance_status_summary:
-                    instance_status_summary[state] += 1
-                else:
-                    instance_status_summary[state] = 1
-
-            print('Instance Summary:')
-            for status, count in instance_status_summary.items():
-                print('  {} = {}'.format(count, status))
-
-            print('Waiting {} seconds before next check...'.format(
-                interval_check_seconds
-            ))
-            time.sleep(interval_check_seconds)
-
-        print('Auto scaling instances terminated')
-
-        scale_event_in_progress = True
-
-        while scale_event_in_progress:
-            try:
-                print('Deleting auto scaling group {}'.format(name))
-                asg_client.delete_auto_scaling_group(
-                    AutoScalingGroupName=name
-                )
-                print('Auto scaling group deleted.')
-                scale_event_in_progress = False
-            except asg_client.exceptions.ScalingActivityInProgressFault:
-                print('Auto scaling group activity in progress. '
-                      'Waiting 30 seconds for next attempt...')
-                time.sleep(30)
-            except Exception as err:
-                print('Fail to delete auto scaling group with error:')
-                print(str(err))
-                scale_event_in_progress = False
-
-    def wait_for_desired_capacity(self, asg_name, desired_capacity,
-                                  wait_seconds=1):
-        # set initial capacity
-        current_capacity = 0
-        print('Waiting instances to become available...')
-
-        while desired_capacity != current_capacity:
-            print('Waiting {} seconds to perform new check'.format(
-                wait_seconds
-            ))
-            time.sleep(wait_seconds)
-            asg = self.get_auto_scaling_group_by_name(asg_name)
-            count_capacity = 0
-
-            if 'Instances' in asg:
-                for instance in asg['Instances']:
-                    if not instance['HealthStatus'] == 'Healthy':
-                        continue
-                    if not instance['LifecycleState'] == 'InService':
-                        continue
-                    count_capacity += 1
-
-            current_capacity = count_capacity
-            print('Current capacity = {}'.format(current_capacity))
-            print('Desired capacity = {}'.format(desired_capacity))
-
 
 def deploy_cmd(args):
     print('Deploying...')
 
     img = Image(env=args.env, name=args.image)
     ps = Param(args.env)
+
+    deploy = DeployBlueGreen(img)
+    print(deploy.discover_auto_scaling_groups())
+
+    exit()
 
     with DeployLock(img) as lock:
         print('Lock acquired: {}'.format(lock))

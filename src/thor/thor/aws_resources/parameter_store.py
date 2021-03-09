@@ -18,7 +18,7 @@ class ParameterStore(AwsResource):
     STRING_TYPE = 'String'
 
     def __init__(self, env):
-        super().__init__('ssm', env)
+        super().__init__('ssm', env, alias='parameter')
 
     def __parse_params(self, params):
         parsed_config = {}
