@@ -34,7 +34,7 @@ class AwsResource:
         Output Resource current status to /dev/stdout
         '''
         print('[{resource_group}] {status}'.format(
-            resource_group=self.alias,
+            resource_group=self.alias.upper(),
             status=status
         ))
 
