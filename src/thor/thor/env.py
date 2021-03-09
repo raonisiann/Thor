@@ -22,6 +22,7 @@ class Env:
             base=Env.ROOT_FOLDER,
             env=self.name
         )
+        self.__env_list = []
         self.__config = Config(Env.CONFIG_FILE_PATH.format(env_dir=self.path))
         self.__saved_dir = None
 
@@ -47,8 +48,7 @@ class Env:
     def is_valid(self):
         if self.name is None:
             return False
-
-        environments = self.get_all()
+        environments = self.list()
 
         if self.name in environments:
             return True
@@ -64,15 +64,19 @@ class Env:
         if not self.is_valid():
             raise EnvException('Invalid environment {}'.format(self.name))
 
-    def get_all(self):
-        env_list = []
+    def list(self):
+        if self.__env_list:
+            return self.__env_list
+
         try:
             dirs = os.listdir(path=Env.ROOT_FOLDER)
-            for name in dirs:
-                env_list.append(name)
-            return env_list
         except FileNotFoundError:
-            print('Unable to locate env dir')
+            print('Invalid environment dir "{}"'.format(Env.ROOT_FOLDER))
+            exit(-1)
+
+        for name in dirs:
+            self.__env_list.append(name)
+        return self.__env_list
 
     def create(self):
         try:
@@ -122,10 +126,9 @@ class Env:
 
 def list_env_cmd(args):
     env = Env()
-    environments = env.get_all()
+    environments = env.list()
     for env in environments:
         print('{}'.format(env))
-
 
 def create_env_cmd(args):
     print('Creating environment {}'.format(args.name))
