@@ -26,6 +26,4 @@ class TestAutoScalingGroup(TestCase):
             'HealthStatus': 'not_healthy',
             'LifecycleState': 'InService'
         }
-        self.assertTrue(autoscaling._AutoScaling__is_instance_health(fake_health_input))
-
-    
+        self.assertFalse(autoscaling._AutoScaling__is_instance_health(fake_health_input))
