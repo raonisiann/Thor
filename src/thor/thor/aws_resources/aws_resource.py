@@ -16,10 +16,13 @@ class AwsResource:
     MIN_RETRY_INTERVAL_SECONDS = 1
     MIN_TIMEOUT_SECONDS = 1
 
-    def __init__(self, name, env):
-        self.name = name
+    def __init__(self, client_name, env, alias=None):
+        self.client_name = client_name
         self.env = env
+        self.alias = alias
         self.__client = None
+        if alias is None:
+            self.alias = self.client_name
 
     def client(self):
         if self.__client is None:
@@ -31,7 +34,7 @@ class AwsResource:
         Output Resource current status to /dev/stdout
         '''
         print('[{resource_group}] {status}'.format(
-            resource_group=self.name,
+            resource_group=self.alias,
             status=status
         ))
 
