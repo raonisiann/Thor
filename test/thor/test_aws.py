@@ -1,5 +1,5 @@
+from thor.lib.aws import Aws, AwsClientException
 from unittest import TestCase
-from thor.aws import Aws, AwsClientException
 
 
 class TestAws(TestCase):

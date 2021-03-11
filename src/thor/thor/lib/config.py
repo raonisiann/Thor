@@ -1,8 +1,10 @@
 import json
 import os
 
+
 class ConfigException(Exception):
     pass
+
 
 class Config:
 

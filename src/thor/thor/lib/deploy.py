@@ -1,13 +1,16 @@
-#!/usr/bin/env python3
 import abc
-import argparse
-import datetime
-import time
-from thor.utils.names_generator import random_string
-from .env import Env
-from .image import Image
-from .param import Param
-from .aws import Aws
+import logging
+from datetime import datetime
+from thor.lib.aws_resources.autoscaling import AutoScaling
+from thor.lib.aws_resources.launch_template import LaunchTemplate
+from thor.lib.aws_resources.parameter_store import (
+    ParameterStore,
+    ParameterStoreAlreadyExistsException
+)
+from thor.lib.base import Base
+from thor.lib.env import Env
+from thor.lib.image import Image
+from thor.lib.utils.names_generator import random_string
 
 
 class DeployException(Exception):
@@ -18,14 +21,36 @@ class DeployLockException(Exception):
     pass
 
 
-class DeployLock:
+class DeployLockAlreadyAcquiredException(Exception):
+    pass
+
+
+class Deploy(Base):
+
+    __metaclass__ = abc.ABCMeta
+
+    def __init__(self, image):
+        super().__init__()
+        self.image = image
+        self.asg_settings = DeployAutoScalingConfig(image)
+        self.__asg_client = None
+        self.current_state = {}
+        self.created_resources = []
+
+    @abc.abstractmethod
+    def abort(self):
+        return
+
+
+class DeployLock(Base):
 
     LOCK_PARAM = '/{env}/{image}/deploy/lock'
     LOCK_TEMPLATE = 'owner={owner},timestamp={timestamp}'
 
     def __init__(self, image):
+        super().__init__()
         self.image = image
-        self.param = Param(image.env)
+        self.param = ParameterStore(image.env)
         self.lock = ''
 
     def __get_lock_param(self):
@@ -34,58 +59,39 @@ class DeployLock:
             image=self.image.Name()
         )
 
-    def __generate_lock(self):
-        timestamp = datetime.datetime.now().timestamp()
+    def __generate_lock_info(self):
+        timestamp = datetime.now().timestamp()
         owner = 'unknown'
-
         return DeployLock.LOCK_TEMPLATE.format(
             owner=owner,
             timestamp=timestamp
         )
 
-    def get_lock(self):
-        return self.param.get(self.__get_lock_param())
-
-    def is_lock_acquired(self):
-        has_lock = self.get_lock()
-
-        if has_lock:
-            return True
-        else:
-            return False
+    def read_lock_info(self):
+        return self.param.read(self.__get_lock_param())
 
     def acquire(self):
-
-        if not self.is_lock_acquired():
-            return False
-
-        generated_lock = self.__generate_lock()
+        self.logger.info('Acquiring...')
+        self.lock = self.__generate_lock_info()
 
         try:
-            self.param.create(self.__get_lock_param(), generated_lock)
-            self.lock = generated_lock
-            return self.lock
-        except Exception as err:
-            ex_message = 'Unable to acquire lock with error: {}'.format(
-                str(err)
-            )
-            raise DeployLockException(ex_message)
+            self.param.create(self.__get_lock_param(), self.lock)
+            return self
+        except ParameterStoreAlreadyExistsException:
+            self.logger.error('Lock already acquired')
+            raise DeployLockAlreadyAcquiredException()
 
     def release_force(self):
-        self.param.delete(self.__get_lock_param())
+        self.param.destroy(self.__get_lock_param())
 
     def release(self):
+        self.logger.info('Releasing...')
         if self.lock:
-            self.param.delete(self.__get_lock_param())
+            self.param.destroy(self.__get_lock_param())
             self.lock = ''
 
     def __enter__(self):
-        if self.is_lock_acquired():
-            lock = self.get_lock()
-            lock_exception = 'Lock already acquired => {}'.format(lock)
-            raise DeployLockException(lock_exception)
-        else:
-            return self.acquire()
+        return self.acquire()
 
     def __exit__(self, type, value, traceback):
         self.release()
@@ -129,22 +135,6 @@ class DeployAutoScalingConfig:
             if value:
                 config_dict[name] = value
         return config_dict
-
-
-class Deploy(object):
-
-    __metaclass__ = abc.ABCMeta
-
-    def __init__(self, image):
-        self.image = image
-        self.asg_settings = DeployAutoScalingConfig(image)
-        self.__asg_client = None
-        self.current_state = {}
-        self.created_resources = []
-
-    @abc.abstractmethod
-    def abort(self):
-        return
 
 
 class DeployBlueGreen(Deploy):
@@ -249,107 +239,3 @@ class DeployBlueGreen(Deploy):
                 self.delete_launch_template(resource['data'])
             if resource['name'] == 'auto_scaling_group':
                 self.terminate_auto_scaling_group(resource['data'])
-
-
-def deploy_cmd(args):
-    print('Deploying...')
-
-    img = Image(env=args.env, name=args.image)
-    ps = Param(args.env)
-
-    deploy = DeployBlueGreen(img)
-    print(deploy.discover_auto_scaling_groups())
-
-    exit()
-
-    with DeployLock(img) as lock:
-        print('Lock acquired: {}'.format(lock))
-
-        try:
-            latest_ami_param = img.get_latest_ami_built_param()
-            latest_ami_region_param = img.get_latest_ami_region_param()
-            asg_name_param = img.get_asg_name()
-
-            latest_ami_id = ps.get_param(latest_ami_param)
-            latest_ami_region = ps.get_param(latest_ami_region_param)
-            asg_name = ps.get_param(asg_name_param)
-
-            if not latest_ami_id:
-                raise DeployException('Could not get latest AMI')
-
-            if not asg_name:
-                raise DeployException('Could not get Auto Scaling group')
-
-            print('{} = {}'.format(latest_ami_param, latest_ami_id))
-            print('{} = {}'.format(latest_ami_region_param, latest_ami_region))
-            print('{} = {}'.format(asg_name_param, asg_name))
-
-        except Exception as err:
-            raise DeployException('Fail to get params with error: {}'.format(
-                str(err)
-            ))
-
-        try:
-            deploy = Deploy(img)
-            # do blue/green deploy
-            new_asg_name = deploy.do_blue_green_deploy(
-                image=img.get_name(),
-                ami_id=latest_ami_id,
-                asg_name=asg_name
-            )
-            print('Updating AutoScaling group name...')
-            ps.update_param(asg_name_param, new_asg_name)
-            print('DEPLOY DONE.')
-        except DeployException as err:
-            print('Deploy FAIL with error: {}'.format(
-                str(err)
-            ))
-            exit(-1)
-
-
-def main(args):
-    '''
-    Deploy module entry point
-    '''
-    deploy_arg_parser = argparse.ArgumentParser(
-        prog='Thor deploy',
-        description='Thor deploy'
-    )
-
-    # request env for all parameter operations
-    deploy_arg_parser.add_argument(
-        '--env',
-        metavar='ENVIRONMENT',
-        required=True,
-        type=str,
-        help='Environent. Run "thor env list" to show available options.'
-    )
-    # allow to set aws region for all parameter operations
-    deploy_arg_parser.add_argument(
-        '--aws-region',
-        metavar='AWS_REGION',
-        required=False,
-        type=str,
-        help='AWS Region'
-    )
-    # request image for all parameter operations
-    deploy_arg_parser.add_argument(
-        '--image',
-        metavar='IMAGE',
-        required=True,
-        type=str,
-        help='Image. Run "thor image --env=$ENV list"'
-             'to show available options.'
-    )
-
-    args = deploy_arg_parser.parse_args(args)
-    e = Env(args.env)
-    e.is_valid_or_exit()
-
-    if args.aws_region:
-        print('Overriding AWS Region with = {}'.format(args.aws_region))
-        e.set_config('aws_region', args.aws_region)
-    # inject environment object on arguments
-    args.env = e
-    # run deploy
-    deploy_cmd(args)

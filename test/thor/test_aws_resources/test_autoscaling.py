@@ -1,6 +1,7 @@
+from thor.lib.aws_resources.autoscaling import AutoScaling
+from thor.lib.env import Env
 from unittest import TestCase
-from thor.aws_resources.autoscaling import AutoScaling
-from thor.env import Env
+
 
 class TestAutoScalingGroup(TestCase):
 

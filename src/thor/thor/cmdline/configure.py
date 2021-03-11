@@ -1,8 +1,6 @@
 import argparse
-from .env import Env
-from . import (
-    cmd
-)
+from thor.lib import cmd
+from thor.lib.env import Env
 
 
 def configure_aws_credentials(profile):

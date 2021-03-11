@@ -1,11 +1,11 @@
 import time
-from unittest import TestCase
-from thor.env import Env
-from thor.aws_resources.aws_resource import (
+from thor.lib.env import Env
+from thor.lib.aws_resources.aws_resource import (
     AwsResource,
     AwsResourceTimeoutException,
     AwsResourceParameterException
 )
+from unittest import TestCase
 
 
 def fake_api_call(sleep_for=1, exit_status=True):

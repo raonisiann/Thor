@@ -26,7 +26,7 @@ class AwsResource:
 
     def client(self):
         if self.__client is None:
-            self.__client = self.env.aws_client(name)
+            self.__client = self.env.aws_client(self.client_name)
         return self.__client
 
     def output_status(self, status):

@@ -1,6 +1,6 @@
+from thor.lib.config import Config
 from unittest import TestCase
 from unittest.mock import patch
-from thor.config import Config
 
 
 class TestConfig(TestCase):
@@ -32,7 +32,7 @@ class TestConfig(TestCase):
             }
         }
 
-        with patch('thor.config.Config.load_config_file', return_value=test_config):
+        with patch('thor.lib.config.Config.load_config_file', return_value=test_config):
             config = Config('/fake/path/to/config.json')
             # testing valid configs
             self.assertEqual(config.get('aws_region'), 'us-east-1')
@@ -51,6 +51,6 @@ class TestConfig(TestCase):
             self.assertIsNone(config.get('undefined.setting'))
 
     def test_config_file_not_available(self):
-        with patch('thor.config.Config.load_config_file', return_value=None):
+        with patch('thor.lib.config.Config.load_config_file', return_value=None):
             config = Config('/fake/path/to/config.json')
             self.assertIsNone(config.get('undefined.setting'))

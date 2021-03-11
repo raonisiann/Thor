@@ -1,4 +1,4 @@
-from thor.aws_resources.aws_resource import AwsResource
+from thor.lib.aws_resources.aws_resource import AwsResource
 
 
 class ParameterStoreNotFoundException(Exception):
@@ -98,7 +98,7 @@ class ParameterStore(AwsResource):
         saved_params = locals()
         try:
             response = self.client().put_parameter(
-                self.__parse_params(saved_params)
+                **self.__parse_params(saved_params)
             )
         except self.client().exceptions.ParameterAlreadyExists:
             raise ParameterStoreAlreadyExistsException(name)

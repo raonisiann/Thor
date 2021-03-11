@@ -1,4 +1,4 @@
-from thor.aws_resources.aws_resource import AwsResource
+from thor.lib.aws_resources.aws_resource import AwsResource
 
 
 class LaunchTemplateException(Exception):
