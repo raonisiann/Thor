@@ -1,15 +1,16 @@
 import abc
 import logging
 from datetime import datetime
+from thor.lib.base import Base
+from thor.lib.env import Env
+from thor.lib.image import Image
 from thor.lib.aws_resources.autoscaling import AutoScaling
 from thor.lib.aws_resources.launch_template import LaunchTemplate
 from thor.lib.aws_resources.parameter_store import (
     ParameterStore,
-    ParameterStoreAlreadyExistsException
+    ParameterStoreAlreadyExistsException,
+    ParameterStoreNotFoundException
 )
-from thor.lib.base import Base
-from thor.lib.env import Env
-from thor.lib.image import Image
 from thor.lib.utils.names_generator import random_string
 
 
