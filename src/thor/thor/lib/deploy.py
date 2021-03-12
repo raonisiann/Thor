@@ -60,7 +60,7 @@ class DeployLock(Base):
         )
 
     def __generate_lock_info(self):
-        timestamp = datetime.now().timestamp()
+        timestamp = int(datetime.now().timestamp())
         owner = 'unknown'
         return DeployLock.LOCK_TEMPLATE.format(
             owner=owner,
