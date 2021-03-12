@@ -42,6 +42,10 @@ class Deploy(Base):
     def abort(self):
         return
 
+    @abc.abstractmethod
+    def run(self):
+        return
+
 
 class DeployLock(Base):
 
