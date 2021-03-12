@@ -7,10 +7,49 @@ from thor.lib.aws_ami_finder import AwsAmiFinder
 from thor.lib.env import Env
 from thor.lib.packer import Packer
 from thor.lib.param import Param
+from thor.lib.aws_resources.parameter_store import (
+    ParameterStore,
+    ParameterStoreNotFoundException
+)
 
 
 class ImageException(Exception):
     pass
+
+
+class ImageParams:
+
+    RELATIVE_IMAGE_PARAMS = {
+        'autoscaling_name': '/deploy/autoscaling_name',
+        'latest_ami_id':    '/build/latest_ami_id',
+        'stabe_ami_id':     '/build/stable_ami_id'
+    }
+
+    def __init__(self, image, env):
+        self.image_name = image
+        self.env = env
+        self.param = ParameterStore(env)
+        self.__cache = {}
+
+    def __getattr__(self, name):
+        if name in ImageParams.RELATIVE_IMAGE_PARAMS:
+            if name not in self.__cache:
+                self.__cache[name] = self.__read_image_param_value(name)
+            return self.__cache[name]
+        else:
+            raise AttributeError('Unknown attribute {}'.format(name))
+
+    def __read_image_param_value(self, name):
+        full_param_path = '{env}/{image}/{param}'.format(
+            env=self.env.get_name(),
+            image=self.image_name,
+            param=name
+        )
+        try:
+            param_value = self.param.read(full_param_path)
+        except ParameterStoreNotFoundException as err:
+            param_value = None
+        return param_value
 
 
 class Image:
@@ -35,6 +74,7 @@ class Image:
         self.files_dir = None
         self.image_files_list = None
         self.instance_type = instance_type
+        self.params = ImageParams(name, env)
         self.__saved_dir = None
 
     def get_asg_name(self):
