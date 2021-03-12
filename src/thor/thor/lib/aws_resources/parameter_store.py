@@ -43,7 +43,7 @@ class ParameterStore(AwsResource):
         saved_params = locals()
         try:
             response = self.client().delete_parameter(
-                self.__parse_params(saved_params)
+                **self.__parse_params(saved_params)
             )
         except self.client().exceptions.ParameterNotFound:
             raise ParameterStoreNotFoundException()
@@ -52,7 +52,7 @@ class ParameterStore(AwsResource):
         saved_params = locals()
         try:
             response = self.client().get_parameter(
-                self.__parse_params(saved_params)
+                **self.__parse_params(saved_params)
             )
             if 'Parameter' in response:
                 return response['Parameter']
@@ -62,17 +62,7 @@ class ParameterStore(AwsResource):
             raise ParameterStoreNotFoundException()
 
     def get(self, name):
-        saved_params = locals()
-        try:
-            response = self.client().get_parameter(
-                self.__parse_params(saved_params)
-            )
-            if 'Parameter' in response:
-                return response['Parameter']['Value']
-            else:
-                return None
-        except self.client().exceptions.ParameterNotFound:
-            raise ParameterStoreNotFoundException()
+        return self.read(name)
 
     def list(self):
         param_path = '/{env}'.format(
