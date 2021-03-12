@@ -78,7 +78,6 @@ class DeployLock(Base):
             self.param.create(self.__get_lock_param(), self.lock)
             return self
         except ParameterStoreAlreadyExistsException:
-            self.logger.error('Lock already acquired')
             raise DeployLockAlreadyAcquiredException()
 
     def release_force(self):
