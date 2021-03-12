@@ -55,7 +55,7 @@ def main(args):
     '''
     Deploy module entry point
     '''
-    logger = loggin.getLogger('DeployMain')
+    logger = logging.getLogger('DeployMain')
     deploy_arg_parser = argparse.ArgumentParser(
         prog='Thor deploy',
         description='Thor deploy'
