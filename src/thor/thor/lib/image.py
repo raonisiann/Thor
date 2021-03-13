@@ -2,8 +2,8 @@ import argparse
 import json
 import os
 import sys
-from thor.lib import cmd
 from thor.lib.aws_ami_finder import AwsAmiFinder
+from thor.lib.base import Base
 from thor.lib.env import Env
 from thor.lib.packer import Packer
 from thor.lib.param import Param
@@ -17,12 +17,29 @@ class ImageException(Exception):
     pass
 
 
-class ImageParams:
+class ImageParams(object):
 
     RELATIVE_IMAGE_PARAMS = {
-        'autoscaling_name': '/deploy/autoscaling_name',
-        'latest_ami_id':    '/build/latest_ami_id',
-        'stabe_ami_id':     '/build/stable_ami_id'
+        'autoscaling_name': {
+            'name': 'deploy/autoscaling_name',
+            'type': ParameterStore.STRING_TYPE
+        },
+        'deploy_lock': {
+            'name': 'deploy/lock',
+            'type': ParameterStore.STRING_TYPE
+        },
+        'latest_ami_id': {
+            'name': 'build/latest_ami_id',
+            'type': ParameterStore.STRING_TYPE
+        },
+        'stabe_ami_id': {
+            'name': 'build/stable_ami_id',
+            'type': ParameterStore.STRING_TYPE
+        },
+        'ami_id_list': {
+            'name': 'build/ami_id_list',
+            'type': ParameterStore.STRING_LIST_TYPE
+        }
     }
 
     def __init__(self, image, env):
@@ -34,25 +51,42 @@ class ImageParams:
     def __getattr__(self, name):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
             if name not in self.__cache:
-                self.__cache[name] = self.__read_image_param_value(name)
+                param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
+                self.__cache[name] = self.__read_image_param_value(param_name)
             return self.__cache[name]
         else:
             raise AttributeError('Unknown attribute {}'.format(name))
 
-    def __read_image_param_value(self, name):
-        full_param_path = '{env}/{image}/{param}'.format(
+    def __setattr__(self, name, value):
+        if name in ImageParams.RELATIVE_IMAGE_PARAMS:
+            param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
+            param_type = ImageParams.RELATIVE_IMAGE_PARAMS[name]['type']
+            self.__cache[name] = value
+            self.__write_image_param_value(param_name, value, param_type)
+        else:
+            super().__setattr__(name, value)
+
+    def __get_full_parameter_name(self, name):
+        return '/thor/{env}/{image}/{param}'.format(
             env=self.env.get_name(),
             image=self.image_name,
             param=name
         )
+
+    def __read_image_param_value(self, name):
+        full_param_path = self.__get_full_parameter_name(name)
         try:
-            param_value = self.param.read(full_param_path)
+            param_value = self.param.get(full_param_path)
         except ParameterStoreNotFoundException as err:
             param_value = None
         return param_value
 
+    def __write_image_param_value(self, name, value, param_type):
+        full_param_path = self.__get_full_parameter_name(name)
+        param_value = self.param.update_or_create(full_param_path, value, param_type)
 
-class Image:
+
+class Image(Base):
 
     BUILD_FAIL_CODE = -1
 
@@ -65,8 +99,11 @@ class Image:
     LATEST_AMI_BUILT_PARAM = '/{env}/{image}/build/latest/ami_id'
     LATEST_AMI_REGION_PARAM = '/{env}/{image}/build/latest/region'
 
+    AMI_ID_LIST_MAX_SIZE = 10
+
     def __init__(self, env, name, aws_ami=None,
                  instance_type='t2.small'):
+        super().__init__()
         self.name = name
         self.env = env
         self.aws_ami = aws_ami
@@ -76,6 +113,44 @@ class Image:
         self.instance_type = instance_type
         self.params = ImageParams(name, env)
         self.__saved_dir = None
+
+    def __enter__(self):
+        self.__saved_dir = os.getcwd()
+        image_dir = self.get_image_dir()
+
+        try:
+            os.chdir(image_dir)
+            return self
+        except Exception as err:
+            raise ImageException(
+                'Cannot change dir to {} with error {}'.format(
+                    image_dir,
+                    str(err)
+                )
+            )
+
+    def __exit__(self, type, value, traceback):
+        os.chdir(self.__saved_dir)
+        self.__saved_dir = None
+        self.clean_image_manifest_file()
+
+    def clean_image_manifest_file(self):
+        manifest_file_path = '{image_dir}/manifest.json'.format(
+                              image_dir=self.get_image_dir())
+
+        if os.path.exists(manifest_file_path):
+            try:
+                self.logger.info('Removing manifest file...')
+                os.remove(manifest_file_path)
+            except OSError as err:
+                self.logger.warning('Fail to remove {}'.format(manifest_file_path))
+
+    def get_latest_ami_id(self):
+        ami_id_string_list = self.params.ami_id_list
+        if ami_id_string_list is not None:
+            return ami_id_string_list[0]
+        else:
+            return None
 
     def get_asg_name(self):
         return Image.ASG_NAME_PARAM.format(
@@ -322,21 +397,22 @@ class Image:
 
         return json.loads(manifest_content)
 
-    def __enter__(self):
-        self.__saved_dir = os.getcwd()
-        image_dir = self.get_image_dir()
+    def rotate_ami_id_list(self, ami_id, ami_id_list):
+        '''
+        Rotate AMI string list making ami_id to apear at the 
+        begining of the list
 
-        try:
-            os.chdir(image_dir)
-            return self
-        except Exception as err:
-            raise ImageException(
-                'Cannot change dir to {} with error {}'.format(
-                    image_dir,
-                    str(err)
-                )
-            )
+        ami_id (str): ami-444444
+        ami_id_list (list): [ami-333333, ami-222222, ami-11111]
 
-    def __exit__(self, type, value, traceback):
-        os.chdir(self.__saved_dir)
-        self.__saved_dir = None
+        return (str): ami-444444,ami-333333,ami-222222,ami-11111
+        '''
+        if not ami_id_list or ami_id_list is None:
+            return ami_id
+        ami_id_list.insert(0, ami_id)
+        return ','.join(ami_id_list[:Image.AMI_ID_LIST_MAX_SIZE])
+
+    def update_ami_id(self, ami_id):
+        ami_id_list = self.params.ami_id_list
+        rotated_ami_string_list = self.rotate_ami_id_list(ami_id, ami_id_list)
+        self.params.ami_id_list = rotated_ami_string_list

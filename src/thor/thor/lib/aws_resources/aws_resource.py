@@ -1,3 +1,4 @@
+import logging
 import time
 
 
@@ -23,6 +24,7 @@ class AwsResource:
         self.__client = None
         if alias is None:
             self.alias = self.client_name
+        self.logger = logging.getLogger('Resource[{}]'.format(self.alias))
 
     def client(self):
         if self.__client is None:

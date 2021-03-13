@@ -13,9 +13,15 @@ class ParameterStoreException(Exception):
     pass
 
 
+class ParameterStoreUnsupportedParamTypeException(Exception):
+    pass
+
+
 class ParameterStore(AwsResource):
 
     STRING_TYPE = 'String'
+    STRING_LIST_TYPE = 'StringList'
+    SECURE_STRING_TYPE = 'SecureString'
 
     def __init__(self, env):
         super().__init__('ssm', env, alias='parameter')
@@ -42,15 +48,18 @@ class ParameterStore(AwsResource):
     def destroy(self, name):
         saved_params = locals()
         try:
+            self.logger.info('Destroying {}...'.format(name))
             response = self.client().delete_parameter(
                 **self.__parse_params(saved_params)
             )
+            self.logger.info('{} destroyed.'.format(name))
         except self.client().exceptions.ParameterNotFound:
             raise ParameterStoreNotFoundException()
 
     def read(self, name):
         saved_params = locals()
         try:
+            self.logger.info('Reading {}...'.format(name))
             response = self.client().get_parameter(
                 **self.__parse_params(saved_params)
             )
@@ -62,7 +71,16 @@ class ParameterStore(AwsResource):
             raise ParameterStoreNotFoundException()
 
     def get(self, name):
-        return self.read(name)
+        parameter = self.read(name)
+        if 'Value' in parameter:
+            if parameter['Type'] == ParameterStore.STRING_LIST_TYPE:
+                return parameter['Value'].split(',')
+            if parameter['Type'] == ParameterStore.STRING_TYPE:
+                return parameter['Value']
+            if parameter['Type'] == ParameterStore.SECURE_STRING_TYPE:
+                raise ParameterStoreUnsupportedParamTypeException()
+        else:
+            return None
 
     def list(self):
         param_path = '/{env}'.format(

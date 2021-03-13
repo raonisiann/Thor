@@ -2,6 +2,7 @@ import argparse
 import logging
 from thor.__version__ import __version__
 from thor.cmdline import (
+    build,
     configure,
     deploy,
     env,
@@ -14,6 +15,11 @@ from thor.cmdline import (
 THOR_VERSION = __version__
 
 SUB_MODULES = {
+    'build': {
+        'help': 'Thor build',
+        'entry': build.main,
+        'usage': 'thor build SUBCOMMAND'
+    },
     'configure': {
         'help': 'Thor configuration',
         'entry': configure.main,
