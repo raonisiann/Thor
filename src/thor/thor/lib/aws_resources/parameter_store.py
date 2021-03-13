@@ -42,13 +42,38 @@ class ParameterStore(AwsResource):
             parsed_config['Recursive'] = params['recursive']
         return parsed_config
 
+    def __put_parameter(self, name, value, param_type, overwrite):
+        saved_params = locals()
+        try:
+            response = self.client().put_parameter(
+                **self.__parse_params(saved_params)
+            )
+        except self.client().exceptions.ParameterAlreadyExists:
+            raise ParameterStoreAlreadyExistsException(name)
+        except (self.client().exceptions.InternalServerError,
+                self.client().exceptions.InvalidKeyId,
+                self.client().exceptions.ParameterLimitExceeded,
+                self.client().exceptions.TooManyUpdates,
+                self.client().exceptions.HierarchyLevelLimitExceededException,
+                self.client().exceptions.HierarchyTypeMismatchException,
+                self.client().exceptions.InvalidAllowedPatternException,
+                self.client().exceptions.ParameterMaxVersionLimitExceeded,
+                self.client().exceptions.ParameterPatternMismatchException,
+                self.client().exceptions.UnsupportedParameterType,
+                self.client().exceptions.PoliciesLimitExceededException,
+                self.client().exceptions.InvalidPolicyTypeException,
+                self.client().exceptions.InvalidPolicyAttributeException,
+                self.client().exceptions.IncompatiblePolicyException) as err:
+            raise ParameterStoreException(str(err))
+
     def create(self, name, value, param_type=STRING_TYPE):
-        self.update(name, value, param_type, overwrite=False)
+        self.logger.info('Creating {}'.format(name))
+        self.__put_parameter(name, value, param_type, overwrite=False)
 
     def destroy(self, name):
         saved_params = locals()
         try:
-            self.logger.info('Destroying {}...'.format(name))
+            self.logger.info('Destroying {}'.format(name))
             response = self.client().delete_parameter(
                 **self.__parse_params(saved_params)
             )
@@ -59,7 +84,7 @@ class ParameterStore(AwsResource):
     def read(self, name):
         saved_params = locals()
         try:
-            self.logger.info('Reading {}...'.format(name))
+            self.logger.info('Reading {}'.format(name))
             response = self.client().get_parameter(
                 **self.__parse_params(saved_params)
             )
@@ -102,29 +127,10 @@ class ParameterStore(AwsResource):
                 self.client().exceptions.InvalidKeyId) as err:
             raise ParameterStoreException(str(err))
 
-    def update(self, name, value, param_type=STRING_TYPE, overwrite=False):
-        saved_params = locals()
-        try:
-            response = self.client().put_parameter(
-                **self.__parse_params(saved_params)
-            )
-        except self.client().exceptions.ParameterAlreadyExists:
-            raise ParameterStoreAlreadyExistsException(name)
-        except (self.client().exceptions.InternalServerError,
-                self.client().exceptions.InvalidKeyId,
-                self.client().exceptions.ParameterLimitExceeded,
-                self.client().exceptions.TooManyUpdates,
-                self.client().exceptions.HierarchyLevelLimitExceededException,
-                self.client().exceptions.HierarchyTypeMismatchException,
-                self.client().exceptions.InvalidAllowedPatternException,
-                self.client().exceptions.ParameterMaxVersionLimitExceeded,
-                self.client().exceptions.ParameterPatternMismatchException,
-                self.client().exceptions.UnsupportedParameterType,
-                self.client().exceptions.PoliciesLimitExceededException,
-                self.client().exceptions.InvalidPolicyTypeException,
-                self.client().exceptions.InvalidPolicyAttributeException,
-                self.client().exceptions.IncompatiblePolicyException) as err:
-            raise ParameterStoreException(str(err))
+    def update(self, name, value, param_type=STRING_TYPE):
+        self.logger.info('Updating {}'.format(name))
+        self.__put_parameter(name, value, param_type, overwrite=False)
 
     def update_or_create(self, name, value, param_type):
-        self.update(name, value, param_type, overwrite=True)
+        self.logger.info('Updating (overwrite=true) {}'.format(name))
+        self.__put_parameter(name, value, param_type, overwrite=True)
