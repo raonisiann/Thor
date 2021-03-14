@@ -26,6 +26,23 @@ class AwsResource:
             self.alias = self.client_name
         self.logger = logging.getLogger('Resource.{}'.format(self.alias))
 
+    def sanitize_dict(self, input_dict):
+        '''
+        Remove keys that have empty values like
+        empty strings, lists and dict. 'None' is
+        also removed.
+        '''
+        sanitized = {}
+        if input_dict:
+            for k, v in input_dict.items():
+                if v:
+                    sanitized[k] = v
+                if type(v) is int:
+                    sanitized[k] = v
+                if type(v) is bool:
+                    sanitized[k] = v
+        return sanitized
+
     def client(self):
         if self.__client is None:
             self.__client = self.env.aws_client(self.client_name)
@@ -100,6 +117,7 @@ class AwsResource:
                         timeout
                     )
                 )
-            output_status('Waiting {} seconds for next attemp...'.format(retry_interval))
+            self.logger.info('Waiting %s seconds for next attempt...',
+                             retry_interval)
             time.sleep(retry_interval)
         return True

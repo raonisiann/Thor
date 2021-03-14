@@ -1,15 +1,18 @@
 import abc
-import logging
+import time
 from datetime import datetime
 from thor.lib.base import Base
-from thor.lib.env import Env
-from thor.lib.image import Image
-from thor.lib.aws_resources.autoscaling import AutoScaling
-from thor.lib.aws_resources.launch_template import LaunchTemplate
+from thor.lib.aws_resources.autoscaling import (
+    AutoScaling,
+    AutoScalingException
+)
+from thor.lib.aws_resources.launch_template import (
+    LaunchTemplate,
+    LaunchTemplateException
+)
 from thor.lib.aws_resources.parameter_store import (
     ParameterStore,
-    ParameterStoreAlreadyExistsException,
-    ParameterStoreNotFoundException
+    ParameterStoreAlreadyExistsException
 )
 from thor.lib.utils.names_generator import random_string
 
@@ -30,13 +33,14 @@ class Deploy(Base):
 
     __metaclass__ = abc.ABCMeta
 
+    DEFAULT_DESIRED_CAPACITY = 1
+
     def __init__(self, image):
         super().__init__()
         self.image = image
-        self.asg_settings = DeployAutoScalingConfig(image)
-        self.__asg_client = None
-        self.current_state = {}
-        self.created_resources = []
+        self.autoscaling_config = DeployAutoScalingConfig(image)
+        self.created_resources = {}
+        self.running_resources = {}
 
     @abc.abstractmethod
     def abort(self):
@@ -104,142 +108,186 @@ class DeployLock(Base):
 class DeployAutoScalingConfig:
 
     def __init__(self, image):
-        self.__image = image
-        self.description = ""
-        self.ami_id = ""
-        self.instance_type = ""
-        self.key_pair = ""
-        self.availability_zone_names = []
-        self.subnet_ids = []
-        self.lb_target_group = ""
-        self.health_check = None
-        self.min_capacity = 1
-        self.max_capacity = 1
-        self.desired_capacity = 1
+        self.__autoscaling_settings = image.config().get('scaling')
 
-    def __load_config(self):
-        asg_settings = self.__image.env.config().get('auto_scaling_settings')
-        for name, value in asg_settings.items():
-            if name in self.__dict__:
-                self.__setattr__(name, value)
-            else:
-                print('WARNING: Invalid config "{}"'.format(name))
-
-    def generate_asg_name(self):
-        template_name = 'ASG_{image}_{env}_{random}'
-        return template_name.format(
-            image=self.image.get_name(),
-            env=self.image.env.get_name(),
-            random=random_string()
-        )
-
-    def generate_config_dict(self):
-        config_dict = {}
-        for name, value in self.__dict__:
-            if value:
-                config_dict[name] = value
-        return config_dict
+    def __getattr__(self, name):
+        if name in self.__autoscaling_settings:
+            return self.__autoscaling_settings[name]
+        else:
+            raise AttributeError('Unknown autoscaling setting %s', name)
 
 
 class DeployBlueGreen(Deploy):
 
     def __init__(self, image):
         super().__init__(image)
+        self.ami_id = ''
+        self.autoscaling = AutoScaling(image.env)
+        self.is_first_deploy_ever = False
+        self.launch_template = LaunchTemplate(image.env)
+
+    def __sanitize_config(self, config_dict):
+        '''
+        Remove keys that don't have valid values like
+        empty strings, lists and
+        '''
+        sanitized = {}
+        if config_dict:
+            for k, v in config_dict.items():
+                if v:
+                    sanitized[k] = v
+                if type(v) is int:
+                    sanitized[k] = v
+                if type(v) is bool:
+                    sanitized[k] = v
+        return sanitized
+
+    def settle_down(self, seconds=30):
+        self.logger.info('Settle down for %s seconds', seconds)
+        time.sleep(30)
 
     def abort(self):
-        print('Aborting deploy...')
+        self.logger.info('Aborting...')
         exit(-1)
 
-    def do_blue_green_deploy(self, image, ami_id, asg_name):
+    def pre_init_step(self):
+        self.logger.info('Pre init step started...')
+        self.ami_id = self.image.get_latest_ami_id()
+        running_autoscaling = self.image.params.autoscaling_name
+
+        if not self.ami_id:
+            raise DeployException('Could not get latest AMI.'
+                                  'You may need to build the '
+                                  'image before deploy it.')
+        self.logger.info('AMI_ID = %s', self.ami_id)
+
+        if not running_autoscaling:
+            self.logger.info('No running autoscaling groups were found.')
+            self.is_first_deploy_ever = True
+        else:
+            asg_data = self.autoscaling.read(
+                           running_autoscaling)
+            self.logger.info('Found running autoscaling %s',
+                             asg_data['AutoScalingGroupName'])
+            self.logger.info('%s Current Capacity = %s',
+                             asg_data['AutoScalingGroupName'],
+                             asg_data['DesiredCapacity'])
+            self.running_resources['autoscaling'] = asg_data
+
+            if 'LaunchTemplate' in asg_data:
+                lt_name = asg_data['LaunchTemplate']['LaunchTemplateName']
+                self.running_resources['launch_template'] = lt_name
+
+        self.logger.info('Pre init step completed.')
+
+    def create_launch_template_from_config(self):
+        # create new launch configuration
+        name = 'LT_{image}_{env}_{rand}'.format(
+            image=self.image.get_name(),
+            env=self.image.env.Name(),
+            rand=random_string()
+        )
+        config = self.image.config().get_by_prefix('launch_template')
+        if config is None:
+            raise DeployException('launch_template is not defined '
+                                  'in config file')
+
+        if 'instance_type' not in config:
+            raise DeployException('instance_type not defined in config file')
 
         try:
-            cur_asg = self.get_auto_scaling_group_by_name(asg_name)
+            self.launch_template.create(name, self.ami_id, **config)
+        except LaunchTemplateException as err:
+            raise DeployException(str(err))
 
-            if not cur_asg:
-                print('No auto scaling groups were found')
-                self.do_blue_green_deploy_abort()
+        self.created_resources['launch_template'] = name
+        return name
 
-            if not cur_asg['DesiredCapacity'] > 0:
-                print('Desired capacity must be greater than 0.')
-                self.do_blue_green_deploy_abort()
+    def create_autoscaling(self, launch_template_name):
+        new_autoscaling_name = 'ASG_{image}_{env}_{rand}'.format(
+            image=self.image.get_name(),
+            env=self.image.env.Name(),
+            rand=random_string()
+        )
 
-            cur_lt = self.get_launch_template_by_name(
-                cur_asg['LaunchTemplate']['LaunchTemplateName']
-            )
+        if self.is_first_deploy_ever:
+            desired_capacity = Deploy.DEFAULT_DESIRED_CAPACITY
+        else:
+            current_autoscaling = self.running_resources['autoscaling']
+            try:
+                desired_capacity = current_autoscaling['DesiredCapacity']
+            except KeyError:
+                raise DeployException('Cannot find desired capacity '
+                                      'for running auto scaling.')
 
-            print('ASG ' + cur_asg['AutoScalingGroupName'])
-            print('  MinSize --> ' + str(cur_asg['MinSize']))
-            print('  MaxSize --> ' + str(cur_asg['MaxSize']))
-            print('  Desired capacity --> ' + str(cur_asg['DesiredCapacity']))
-            print('  Launch template --> ' + str(cur_lt['LaunchTemplateName']))
+        autoscaling_config = self.image.config().get_by_prefix('scaling')
+        autoscaling_config['name'] = new_autoscaling_name
+        autoscaling_config['desired_capacity'] = desired_capacity
+        autoscaling_config['launch_template_name'] = launch_template_name
+        autoscaling_config = self.__sanitize_config(autoscaling_config)
 
-            # create new launch configuration
-            new_lt_name = 'LT_{env}_{image}_{rand}'.format(
-                env=self.image.env.Name(),
-                image=image,
-                rand=datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
-            )
+        try:
+            self.autoscaling.create(**autoscaling_config)
+            self.created_resources['autoscaling'] = new_autoscaling_name
+        except AutoScalingException as err:
+            raise DeployException(str(err))
+        return new_autoscaling_name
 
-            new_lt_data = cur_lt['LaunchTemplateData']
-            new_lt_data['ImageId'] = ami_id
-            new_lt_id = self.create_launch_template(new_lt_name, new_lt_data)
+    def create_green_environment_step(self):
+        launch_template_name = self.create_launch_template_from_config()
+        autoscaling_name = self.create_autoscaling(launch_template_name)
+        return autoscaling_name
 
-            # create new auto scaling group
-            new_asg_data = {}
-            new_asg_name = 'ASG_{env}_{image}_{rand}'.format(
-                env=self.image.env.Name(),
-                image=image,
-                rand=datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
-            )
-            # items that must be ignored during asg
-            # creation
-            ignore_asg_data = [
-                'AutoScalingGroupARN',
-                'AutoScalingGroupName',
-                'CreatedTime',
-                'LaunchTemplate',
-                'Instances'
-            ]
+    def terminate_blue_environment_step(self):
+        self.logger.info('Terminating blue environment...')
 
-            for name, value in cur_asg.items():
-                if name in ignore_asg_data:
-                    continue
-                if type(value) == list and len(cur_asg[name]) == 0:
-                    continue
+        if 'autoscaling' in self.running_resources:
+            running_autoscaling = self.running_resources['autoscaling']
+            try:
+                self.autoscaling.destroy(
+                 running_autoscaling['AutoScalingGroupName'])
+            except AutoScalingException as err:
+                raise DeployException(str(err))
 
-                new_asg_data[name] = value
+        if 'launch_template' in self.running_resources:
+            running_launch_template = self.running_resources['launch_template']
+            try:
+                self.launch_template.destroy(running_launch_template)
+            except LaunchTemplateException:
+                # this is not an issue, will just keep trash
+                # launch templates on the aws account.
+                self.logger.warning('Could not delete launch template')
 
-            new_asg_data['AutoScalingGroupName'] = new_asg_name
-            new_asg_data['LaunchTemplate'] = {
-                'LaunchTemplateName': new_lt_id,
-                'Version': '$Latest'
-            }
+    def run(self):
+        try:
+            with DeployLock(self.image):
+                self.pre_init_step()
+                green_autoscaling = self.create_green_environment_step()
+                self.settle_down(20)
 
-            self.create_auto_scaling_group(new_asg_data)
+                if not self.is_first_deploy_ever:
+                    self.terminate_blue_environment_step()
 
-            self.wait_for_desired_capacity(
-                asg_name=new_asg_name,
-                desired_capacity=cur_asg['DesiredCapacity'],
-                wait_seconds=30
-            )
-
-            self.terminate_auto_scaling_group(asg_name)
-            print('Deploy SUCCESSFUL')
-            return new_asg_name
+                self.image.params.autoscaling_name = green_autoscaling
+                return 'success'
         except KeyboardInterrupt:
-            print('Deploy CANCELLED by user')
+            self.logger.info('Deploy CANCELLED by user')
             self.do_blue_green_rollback()
+            return 'cancelled'
+        except DeployLockAlreadyAcquiredException:
+            self.logger.error('Lock already acquired. Can\'t proceed...')
+            exit(-1)
+            return 'fail'
         except DeployException as err:
-            print('Something went wrong. {}'.format(str(err)))
+            self.logger.error(str(err))
             self.do_blue_green_rollback()
-            print('Deploy FAILED')
+            return 'fail'
 
     def do_blue_green_rollback(self):
-        print('Running rollback actions...')
+        self.logger.info('Running rollback actions...')
 
-        for resource in self.created_resources:
-
-            if resource['name'] == 'launch_template':
-                self.delete_launch_template(resource['data'])
-            if resource['name'] == 'auto_scaling_group':
-                self.terminate_auto_scaling_group(resource['data'])
+        if 'autoscaling' in self.created_resources:
+            self.autoscaling.destroy(self.created_resources['name'])
+        if 'launch_template' in self.created_resources:
+            self.launch_template.destroy(
+                self.created_resources['launch_template'])

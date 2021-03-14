@@ -1,4 +1,8 @@
 import argparse
+import logging
+from thor.lib.deploy import DeployBlueGreen
+from thor.lib.env import Env
+from thor.lib.image import Image
 
 
 def deploy_cmd(args):
@@ -6,49 +10,15 @@ def deploy_cmd(args):
     logger.info('Starting...')
     image = Image(env=args.env, name=args.image)
 
-    with DeployLock(image):
-        deploy = DeployBlueGreen(image)
-        exit()
-        try:
-            latest_ami_param = img.get_latest_ami_built_param()
-            latest_ami_region_param = img.get_latest_ami_region_param()
-            asg_name_param = img.get_asg_name()
+    deploy = DeployBlueGreen(image)
+    result = deploy.run()
 
-            latest_ami_id = ps.get_param(latest_ami_param)
-            latest_ami_region = ps.get_param(latest_ami_region_param)
-            asg_name = ps.get_param(asg_name_param)
-
-            if not latest_ami_id:
-                raise DeployException('Could not get latest AMI')
-
-            if not asg_name:
-                raise DeployException('Could not get Auto Scaling group')
-
-            print('{} = {}'.format(latest_ami_param, latest_ami_id))
-            print('{} = {}'.format(latest_ami_region_param, latest_ami_region))
-            print('{} = {}'.format(asg_name_param, asg_name))
-
-        except Exception as err:
-            raise DeployException('Fail to get params with error: {}'.format(
-                str(err)
-            ))
-
-        try:
-            deploy = Deploy(img)
-            # do blue/green deploy
-            new_asg_name = deploy.do_blue_green_deploy(
-                image=img.get_name(),
-                ami_id=latest_ami_id,
-                asg_name=asg_name
-            )
-            print('Updating AutoScaling group name...')
-            ps.update_param(asg_name_param, new_asg_name)
-            print('DEPLOY DONE.')
-        except DeployException as err:
-            print('Deploy FAIL with error: {}'.format(
-                str(err)
-            ))
-            exit(-1)
+    if result == 'success':
+        logger.info('Completed with no errors :)')
+    elif result == 'cancelled':
+        logger.info('Cancelled')
+    elif result == 'fail':
+        logger.error('Deploy fail')
 
 
 def main(args):
@@ -114,8 +84,10 @@ def main(args):
         logger.info('Overriding AMI ID with = {}'.format(args.ami_id))
         e.set_config('auto_scaling_settings.ami_id', args.ami_id)
     if args.autoscaling_name:
-        logger.info('Overriding AutoScaling group name with = {}'.format(args.autoscaling_name))
-        e.set_config('auto_scaling_settings.autoscaling_name', args.autoscaling_name)
+        logger.info('Overriding AutoScaling group name with = {}'.format(
+                    args.autoscaling_name))
+        e.set_config('auto_scaling_settings.autoscaling_name',
+                     args.autoscaling_name)
     # inject environment object on arguments
     args.env = e
     # run deploy

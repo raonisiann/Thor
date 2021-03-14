@@ -4,10 +4,7 @@ from thor.lib import cmd
 from thor.lib.env import Env
 from thor.lib.image import Image
 from thor.lib.packer import Packer
-from thor.lib.aws_resources.parameter_store import (
-    ParameterStore,
-    ParameterStoreException
-)
+from thor.lib.aws_resources.parameter_store import ParameterStoreException
 
 
 def build_cmd(args):

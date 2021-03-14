@@ -1,3 +1,5 @@
+import botocore
+import time
 from thor.lib.aws_resources.aws_resource import AwsResource
 
 
@@ -14,24 +16,27 @@ class AutoScaling(AwsResource):
     def __init__(self, env):
         super().__init__('autoscaling', env)
 
-    def __parse_params(self, **params):
+    def __parse_params(self, params):
+        params = self.sanitize_dict(params)
         parsed_config = {}
 
         if 'name' in params:
             parsed_config['AutoScalingGroupName'] = params['name']
 
         if 'names' in params:
-            parsed_config['AutoScalingGroupNames'] = params['names']
+            name_list = [params['names']]
+            parsed_config['AutoScalingGroupNames'] = name_list
 
         if 'launch_template_name' in params:
+            lt_name = params['launch_template_name']
             parsed_config['LaunchTemplate'] = {}
-            parsed_config['LaunchTemplate']['LaunchTemplateName'] = params['launch_template_name']
+            parsed_config['LaunchTemplate']['LaunchTemplateName'] = lt_name
 
-        if 'min_size' in params:
-            parsed_config['MinSize'] = params['min_size']
+        if 'min_capacity' in params:
+            parsed_config['MinSize'] = params['min_capacity']
 
-        if 'max_size' in params:
-            parsed_config['MaxSize'] = params['max_size']
+        if 'max_capacity' in params:
+            parsed_config['MaxSize'] = params['max_capacity']
 
         if 'desired_capacity' in params:
             parsed_config['DesiredCapacity'] = params['desired_capacity']
@@ -49,12 +54,14 @@ class AutoScaling(AwsResource):
             parsed_config['HealthCheckType'] = params['health_check_type']
 
         if 'health_check_grace_period' in params:
-            parsed_config['HealthCheckGracePeriod'] = params['health_check_grace_period']
+            hc_period = params['health_check_grace_period']
+            parsed_config['HealthCheckGracePeriod'] = hc_period
 
         if 'vpc_zone_identifier' in params:
-            parsed_config['VPCZoneIdentifier'] = params['vpc_zone_identifier']
+            vpc_subnets = ','.join(params['vpc_zone_identifier'])
+            parsed_config['VPCZoneIdentifier'] = vpc_subnets
 
-        if 'tags' in params:
+        if 'tags' in params and params['tags']:
             parsed_config['Tags'] = params['tags']
 
         return parsed_config
@@ -76,23 +83,23 @@ class AutoScaling(AwsResource):
             for instance in asg['Instances']:
                 if self.__is_instance_health(instance):
                     current_capacity += 1
-        output_status('Current capacity = {}'.format(current_capacity))
-        output_status('Desired capacity = {}'.format(desired_capacity))
+        self.logger.info('Current capacity = {}'.format(current_capacity))
+        self.logger.info('Desired capacity = {}'.format(desired_capacity))
 
         if desired_capacity == current_capacity:
             return True
 
     def __terminate_autoscaling_instance(self, instance_id):
         try:
-            asg_client.terminate_instance_in_auto_scaling_group(
+            self.client().terminate_instance_in_auto_scaling_group(
                 InstanceId=instance_id,
                 ShouldDecrementDesiredCapacity=True
             )
-            output_status('Termination request sent for {}'.format(instance_id))
+            self.logger.info('Termination request sent for %s', instance_id)
         except self.client().exceptions.ScalingActivityInProgressFault as err:
-            raise DeployException(str(err))
+            raise AutoScalingException(str(err))
         except self.client().exceptions.ResourceContentionFault as err:
-            raise DeployException(str(err))
+            raise AutoScalingException(str(err))
 
     def __wait_for_instances_terminated_state(self, name):
         seconds_between_termination_requests = 2
@@ -117,34 +124,45 @@ class AutoScaling(AwsResource):
                     self.__terminate_autoscaling_instance(i['InstanceId'])
                     time.sleep(seconds_between_termination_requests)
 
-            output_status('Capacity {} -> {}'.format(instance_count, target_capacity))
+            self.logger.info('Capacity {} -> {}'.format(instance_count,
+                                                        target_capacity))
 
             if instance_count:
-                output_status('Instance state summary')
-                for status, count in instance_status_summary.items():
-                    output_status('  {} = {}'.format(count, status))
+                self.logger.info('Instance state summary')
+                for status, count in state_summary.items():
+                    self.logger.info('  {} = {}'.format(count, status))
             else:
                 # no instances left on autoscaling...
                 break
-            output_status('Waiting {} seconds...'.format(interval_check_seconds))
+            self.logger.info('Waiting %s seconds...', interval_check_seconds)
             time.sleep(interval_check_seconds)
-        output_status('Instances terminated')
+        self.logger.info('Instances terminated')
 
-    def create(self, name, launch_template_name, min_size,
-               max_size, desired_capacity, default_cooldown=None,
-               availability_zones=None, target_group_arn=None, health_check_type=None,
-               health_check_grace_period=None, vpc_zone_identifier=None, tags=None):
+    def create(self, name, launch_template_name, min_capacity,
+               max_capacity, desired_capacity, default_cooldown=None,
+               availability_zones=None, target_group_arn=None,
+               health_check_type=None, health_check_grace_period=None,
+               vpc_zone_identifier=None, tags=None):
         saved_params = locals()
         try:
-            output_status('Creating {}...'.format(name))
+            parsed_config = self.__parse_params(saved_params)
+            self.logger.info('Creating {}...'.format(name))
+
+            for k, v in parsed_config.items():
+                self.logger.info('{}={}'.format(k, v))
             response = self.client().create_auto_scaling_group(
-                self.__parse_params(**saved_params)
+                **parsed_config
             )
             # wait for autoscaling and instance lifecycle completes
-            output_status('Waiting instances to become available...')
-            self.wait_for(5, 1200, self.__check_instance_ready_state, name, desired_capacity)
-            output_status('Instances available.')
-            output_status('Created')
+            self.logger.info('Waiting instances to become available...')
+            self.wait_for(15, 1200, self.__check_instance_ready_state, name,
+                          desired_capacity)
+            self.logger.info('Instances available.')
+            self.logger.info('Created')
+        except botocore.exceptions.ParamValidationError as err:
+            raise AutoScalingException(str(err))
+        except botocore.exceptions.ClientError as err:
+            raise AutoScalingException(str(err))
         except self.client().exceptions.AlreadyExistsFault as err:
             raise AutoScalingException(str(err))
         except self.client().exceptions.LimitExceededFault as err:
@@ -157,34 +175,34 @@ class AutoScaling(AwsResource):
     def destroy(self, name):
         saved_params = locals()
         seconds_to_wait_for_autoscaling_activity = 30
-        output_status('Terminating {}...'.format(name))
+        self.logger.info('Terminating {}...'.format(name))
 
         try:
-            self.update(name, min_size=0)
+            self.update(name, min_capacity=0)
         except AutoScalingActivityInProgress:
-            raise AutoScalingException('Can\'t proceed with destroy. AutoScaling activity in progress.')
+            raise AutoScalingException('Can\'t proceed with destroy.'
+                                       'AutoScaling activity in progress.')
 
         self.__wait_for_instances_terminated_state(name)
         scale_event_in_progress = True
 
         while scale_event_in_progress:
             try:
-                output_status('Destroying {}...'.format(name))
+                self.logger.info('Destroying {}...'.format(name))
                 self.client().delete_auto_scaling_group(
-                    self.__parse_params(**saved_params)
+                    **self.__parse_params(saved_params)
                 )
                 scale_event_in_progress = False
             except self.client().exceptions.ScalingActivityInProgressFault:
-                output_status('Activity in progress. Can\'t delete.')
-                output_status('Waiting {} seconds for next attempt...'.format(
-                    seconds_to_wait_for_autoscaling_activity
-                ))
+                self.logger.info('Activity in progress. Can\'t delete.')
+                self.logger.info('Waiting %s seconds for next attempt...',
+                                 seconds_to_wait_for_autoscaling_activity)
                 time.sleep(seconds_to_wait_for_autoscaling_activity)
             except self.client().exceptions.ResourceContentionFault as err:
                 raise AutoScalingException(str(err))
             except self.client().exceptions.ResourceInUseFault as err:
                 raise AutoScalingException(str(err))
-        output_status('{} destroyed.'.format(name))
+        self.logger.info('{} destroyed.'.format(name))
 
     def discover(self, name):
         try:
@@ -209,7 +227,7 @@ class AutoScaling(AwsResource):
         saved_params = locals()
         try:
             response = self.client().describe_auto_scaling_groups(
-                self.__parse_params(**saved_params)
+                **self.__parse_params(saved_params)
             )
 
             if 'AutoScalingGroups' not in response:
@@ -221,20 +239,21 @@ class AutoScaling(AwsResource):
         except self.client().exceptions.ResourceContentionFault as err:
             raise AutoScalingException(str(err))
 
-    def update(self, name, launch_template_name=None, min_size=None,
-               max_size=None, desired_capacity=None, default_cooldown=None,
+    def update(self, name, launch_template_name=None, min_capacity=None,
+               max_capacity=None, desired_capacity=None, default_cooldown=None,
                availability_zones=None, health_check_type=None,
                health_check_grace_period=None, vpc_zone_identifier=None):
         saved_params = locals()
         try:
-            output_status('Updating {}...'.format(name))
-            for k, v in config:
-                output_status('setting: {} = {}'.format(k, v))
+            parsed_params = self.__parse_params(saved_params)
+            self.logger.info('Updating {}...'.format(name))
+            for k, v in parsed_params.items():
+                self.logger.info('setting: {} = {}'.format(k, v))
 
             response = self.client().update_auto_scaling_group(
-                self.__parse_params(**saved_params)
+                **parsed_params
             )
-            output_status('{} updated.'.format(name))
+            self.logger.info('{} updated.'.format(name))
         except self.client().exceptions.ScalingActivityInProgressFault as err:
             raise AutoScalingActivityInProgress(str(err))
         except self.client().exceptions.ResourceContentionFault as err:

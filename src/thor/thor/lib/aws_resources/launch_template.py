@@ -11,24 +11,28 @@ class LaunchTemplate(AwsResource):
         super().__init__('ec2', env, 'launch_template')
 
     def __parse_params(self, params):
+        params = self.sanitize_dict(params)
         parsed_params = {}
-        parsed_params['LaunchTemplateData'] = {}
+        lt_data = {}
         if 'name' in params:
             parsed_params['LaunchTemplateName'] = params['name']
         if 'image_id' in params:
-            parsed_params['LaunchTemplateData']['ImageId'] = params['image_id']
+            lt_data['ImageId'] = params['image_id']
         if 'instance_type' in params:
-            parsed_params['LaunchTemplateData']['InstanceType'] = params['instance_type']
-        if 'key_pair' in params and params['key_pair'] is not None:
-            parsed_params['LaunchTemplateData']['KeyName'] = params['key_pair']
+            lt_data['InstanceType'] = params['instance_type']
+        if 'key_pair' in params:
+            lt_data['KeyName'] = params['key_pair']
+        if 'security_group_ids' in params:
+            lt_data['SecurityGroupIds'] = params['security_group_ids']
         if 'version' in params:
             parsed_params['Versions'] = [params['version']]
 
-        if not parsed_params['LaunchTemplateData']:
-            del(parsed_params['LaunchTemplateData'])
+        if lt_data:
+            parsed_params['LaunchTemplateData'] = lt_data
         return parsed_params
 
-    def create(self, name, image_id, instance_type, key_pair=None):
+    def create(self, name, image_id, instance_type, key_pair=None,
+               security_group_ids=None):
         saved_params = locals()
         try:
             parsed_params = self.__parse_params(saved_params)
@@ -48,7 +52,7 @@ class LaunchTemplate(AwsResource):
         saved_params = locals()
         try:
             self.logger.info('Deleting {}...'.format(name))
-            ec2.delete_launch_template(
+            self.client().delete_launch_template(
                 **self.__parse_params(saved_params)
             )
             self.logger.info('Deleted')
