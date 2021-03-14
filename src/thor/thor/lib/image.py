@@ -5,6 +5,7 @@ import sys
 from thor.lib.aws_ami_finder import AwsAmiFinder
 from thor.lib.base import Base
 from thor.lib.env import Env
+from thor.lib.config import Config
 from thor.lib.packer import Packer
 from thor.lib.param import Param
 from thor.lib.aws_resources.parameter_store import (
@@ -100,6 +101,7 @@ class Image(Base):
     LATEST_AMI_REGION_PARAM = '/{env}/{image}/build/latest/region'
 
     AMI_ID_LIST_MAX_SIZE = 10
+    CONFIG_FILE_PATH = '{image_dir}/config.json'
 
     def __init__(self, env, name, aws_ami=None,
                  instance_type='t2.small'):
@@ -112,6 +114,8 @@ class Image(Base):
         self.image_files_list = None
         self.instance_type = instance_type
         self.params = ImageParams(name, env)
+        self.__config = Config(Image.CONFIG_FILE_PATH.format(
+                               image_dir=self.get_image_dir()))
         self.__saved_dir = None
 
     def __enter__(self):
@@ -144,6 +148,9 @@ class Image(Base):
                 os.remove(manifest_file_path)
             except OSError as err:
                 self.logger.warning('Fail to remove {}'.format(manifest_file_path))
+
+    def config(self):
+        return self.__config
 
     def get_latest_ami_id(self):
         ami_id_string_list = self.params.ami_id_list
