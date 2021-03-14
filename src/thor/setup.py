@@ -14,7 +14,7 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'thor = thor.main:run'
+            'thor = thor.cmdline.main:run'
         ]
     }
 )

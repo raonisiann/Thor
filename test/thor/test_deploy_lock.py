@@ -1,8 +1,12 @@
+from thor.lib.aws_resources.parameter_store import ParameterStoreAlreadyExistsException
+from thor.lib.deploy import (
+    DeployLock,
+    DeployLockAlreadyAcquiredException
+)
+from thor.lib.env import Env
+from thor.lib.image import Image
 from unittest import TestCase
-from unittest.mock import patch
-from thor.deploy import DeployLock
-from thor.env import Env
-from thor.image import Image
+from unittest.mock import patch, Mock
 
 
 class TestDeployLock(TestCase):
@@ -11,16 +15,23 @@ class TestDeployLock(TestCase):
         self.fake_env = Env('fake')
         self.fake_image = Image(self.fake_env, 'fake_image')
 
-    @patch('thor.deploy.DeployLock.is_lock_acquired')
-    def test_lock_acquired(self, mock_lock):
+    @patch('thor.lib.deploy.ParameterStore')
+    def test_lock_acquired(self, mock_param):
         deploy_lock = DeployLock(self.fake_image)
-        mock_lock.return_value = True
-        with patch('thor.deploy.Param.create'):
-            self.assertTrue(deploy_lock.acquire())
+        mock_param.create.return_value = 'created'
+        self.assertIsInstance(deploy_lock.acquire(), DeployLock)
 
-    @patch('thor.deploy.DeployLock.is_lock_acquired')
-    def test_lock_not_acquired(self, mock_lock):
+    @patch('thor.lib.deploy.ParameterStore.create', Mock(side_effect=ParameterStoreAlreadyExistsException()))
+    def test_lock_already_acquired(self):
         deploy_lock = DeployLock(self.fake_image)
-        mock_lock.return_value = False
-        with patch('thor.deploy.Param.create'):
-            self.assertFalse(deploy_lock.acquire())
+        with self.assertRaises(DeployLockAlreadyAcquiredException):
+            deploy_lock.acquire()
+            mock_param.create.assert_called_once()
+
+    @patch('thor.lib.deploy.ParameterStore')
+    def test_release(self, mock_param):
+        deploy_lock = DeployLock(self.fake_image)
+        mock_param.destroy.return_value = 'deleted'
+        deploy_lock.lock = 'test'
+        deploy_lock.release()
+        self.assertEqual(deploy_lock.lock, '')

@@ -1,22 +1,25 @@
-#!/usr/bin/env python3
-
 import argparse
-from .__version__ import __version__
-from . import (
-    aws_instances,
+import logging
+from thor.__version__ import __version__
+from thor.cmdline import (
+    build,
     configure,
     deploy,
     env,
-    infra,
     image,
+    infra,
     param,
-    setup,
-    stack
+    setup
 )
 
 THOR_VERSION = __version__
 
 SUB_MODULES = {
+    'build': {
+        'help': 'Thor build',
+        'entry': build.main,
+        'usage': 'thor build SUBCOMMAND'
+    },
     'configure': {
         'help': 'Thor configuration',
         'entry': configure.main,
@@ -32,20 +35,15 @@ SUB_MODULES = {
         'entry': env.main,
         'usage': 'thor env SUBCOMMAND'
     },
-    'infra': {
-        'help': 'Alias for terraform',
-        'entry': infra.main,
-        'usage': 'thor infra SUBCOMMAND'
-    },
     'image': {
         'help': 'Manager application images with Packer',
         'entry': image.main,
         'usage': 'thor image SUBCOMMAND'
     },
-    'instances': {
-        'help': 'Manager AWS instances',
-        'entry': aws_instances.main,
-        'usage': 'thor instances SUBCOMMAND'
+    'infra': {
+        'help': 'Alias for terraform',
+        'entry': infra.main,
+        'usage': 'thor infra SUBCOMMAND'
     },
     'param': {
         'help': 'Manage parameters on AWS SSM Parameter Store',
@@ -57,11 +55,6 @@ SUB_MODULES = {
         'entry': setup.main,
         'usage': 'thor setup SUBCOMMAND'
     },
-    'stack': {
-        'help': 'Stack management for Thor',
-        'entry': stack.main,
-        'usage': 'thor stack SUBCOMMAND'
-    }
 }
 
 
@@ -88,6 +81,8 @@ def run():
 
     You SHOULD NOT write any business logic here.
     '''
+
+    logging.basicConfig(format='%(levelname)s - %(name)s -> %(message)s', level=logging.INFO)
 
     main_parser = argparse.ArgumentParser(
         prog='thor',
