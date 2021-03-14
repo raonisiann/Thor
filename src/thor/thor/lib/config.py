@@ -11,19 +11,19 @@ class Config(Base):
 
     def __init__(self, config_path):
         super().__init__()
-        self.__config_path = config_path
-        self.__loaded_config = {}
+        self.config_path = config_path
+        self.loaded_config = {}
 
     def load_config_file(self):
-        if os.path.exists(self.__config_path):
-            self.logger.info('Loading config file %s', self.__config_path)
-            with open(self.__config_path) as f:
+        if os.path.exists(self.config_path):
+            self.logger.info('Loading config file %s', self.config_path)
+            with open(self.config_path) as f:
                 return json.loads(f.read())
         # no config file available
         return None
 
     def lazy_load_config(self):
-        if self.__loaded_config:
+        if self.loaded_config:
             return
         json_config = self.load_config_file()
         if json_config:
@@ -39,12 +39,20 @@ class Config(Base):
             if type(value) is dict:
                 self.__load_config_dict_rec(value, config_path)
             else:
-                self.__loaded_config[config_path] = value
+                self.loaded_config[config_path] = value
+
+    def get_by_prefix(self, name):
+        self.lazy_load_config()
+        matches = {}
+        for k, v in self.loaded_config.items():
+            if k.startswith(name):
+                matches[k[len(name)+1:]] = v
+        return matches
 
     def get(self, name):
         self.lazy_load_config()
-        if name in self.__loaded_config:
-            return self.__loaded_config[name]
+        if name in self.loaded_config:
+            return self.loaded_config[name]
         else:
             return None
 
@@ -52,4 +60,4 @@ class Config(Base):
         self.lazy_load_config()
         if name is not str:
             raise ConfigException('Config name must be an string')
-        self.__loaded_config[name] = value
+        self.loaded_config[name] = value
