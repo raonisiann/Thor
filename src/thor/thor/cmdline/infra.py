@@ -1,5 +1,6 @@
 import argparse
-from thor.lib.infra import Infra
+from thor.lib.env import Env
+from thor.lib.terraform import Terraform
 
 
 def main(args):
@@ -26,8 +27,8 @@ def main(args):
     e.is_valid_or_exit()
 
     if 'env' in args:
-        infra = Infra()
-        infra.run_terraform(args.env, terraform_args)
+        terraform = Terraform()
+        terraform.run(*terraform_args)
     else:
         infra_arg_parser.print_usage()
         exit(-1)
