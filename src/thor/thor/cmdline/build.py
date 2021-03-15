@@ -1,6 +1,5 @@
 import argparse
 import logging
-from thor.lib import cmd
 from thor.lib.env import Env
 from thor.lib.image import Image
 from thor.lib.packer import Packer
@@ -10,20 +9,16 @@ from thor.lib.aws_resources.parameter_store import ParameterStoreException
 def build_cmd(args):
     logger = logging.getLogger('BuildCmd')
     logger.info('Building... ')
-    packer_exec = Packer().get_exec_path()
+    packer = Packer()
 
     with Image(args.env, args.image, None) as image:
         logger.info('Changing directory to {}'.format(image.get_image_dir()))
-        # $ packer build TEMPLATE
-        packer_cmd = [
-            '{packer_exec}'.format(packer_exec=packer_exec),
-            'build',
-            '{}'.format(Image.PACKER_FILE)
-        ]
         # run packer build
-        result = cmd.run_interactive(packer_cmd)
+        result = packer.run('build', Image.PACKER_FILE)
         logger.info('Return code is {}'.format(result))
-
+        if not result == 0:
+            logger.error('Packer build fail')
+            exit(Image.BUILD_FAIL_CODE)
         logger.info('Getting latest built artifact...')
         try:
             artifact_id = image.get_manifest_artifact_id()

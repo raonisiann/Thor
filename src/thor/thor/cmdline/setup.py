@@ -1,139 +1,67 @@
 import argparse
-import requests
+import logging
 import os
 import zipfile
+from thor.lib.executable import ExecutableDownloadAlreadyExists
+from thor.lib.packer import Packer
+from thor.lib.terraform import Terraform
 
 
-# Assuming current working dir
-# is the root of the project.
-SETUP_DIRS = {
-    'bin': '{}/bin'.format(os.getcwd()),
-    'tmp': '{}/tmp'.format(os.getcwd())
-}
+TMP_DIR = '/tmp'
+PACKAGES = [
+    Packer(),
+    Terraform()
+]
 
-HASHICORP_URL = 'https://releases.hashicorp.com'
-
-
-PACKAGES = {
-    'packer': {
-        'download_url': 'https://releases.hashicorp.com/'
-                        'packer/1.6.5/packer_1.6.5_linux_amd64.zip'
-    },
-    'terraform': {
-        'download_url': 'https://releases.hashicorp.com/'
-                        'terraform/0.14.0/terraform_0.14.0_linux_amd64.zip'
-    }
-}
-
-
-def get_tmp_dir():
-    return SETUP_DIRS['tmp']
-
-
-def get_bin_dir():
-    return SETUP_DIRS['bin']
-
-
-def get_package_path(package):
-    if package in PACKAGES:
-        return '{base}/{package}'.format(
-            base=SETUP_DIRS[package],
-            package=package
-        )
-    raise Exception('Unable to get package {}.'.format(package))
+logger = logging.getLogger('setup')
 
 
 def __create_dirs():
-    for _, path in SETUP_DIRS.items():
-        if os.path.exists(path):
+    for obj in PACKAGES:
+        if os.path.exists(obj.install_dir):
             continue
-
         try:
-            os.mkdir(path)
+            os.mkdir(obj.install_dir)
         except OSError as err:
-            print(str(err))
+            logger.error(str(err))
             exit(-1)
 
 
-def download(name, url):
-
-    try:
-        response = requests.get(
-            url,
-            allow_redirects=True
-        )
-    except Exception as err:
-        raise Exception(
-            'Fail to download {} with error: {}'.format(
-                name,
-                str(err)
-            )
-        )
-
-    tmp_file = '{base}/{name}'.format(
-        base=get_tmp_dir(),
-        name=name
-    )
-
-    with open(tmp_file, 'wb') as download:
-        try:
-            download.write(response.content)
-        except Exception as err:
-            print('Unable to write content at {}'.format(tmp_file))
-            print(str(err))
-
-    return tmp_file
-
-
 def clean_packages(args):
+    logger.info('Cleaning packages...')
+    for obj in PACKAGES:
+        exec_path = obj.get_exec_path()
+        logger.info('Cleaning {}'.format(exec_path))
 
-    for name, _ in PACKAGES.items():
-        print('Cleaning {}'.format(name), end='...')
-        bin_file = '{base_dir}/{file_name}'.format(
-            base_dir=get_bin_dir(),
-            file_name=name
-        )
-
-        if os.path.exists(bin_file):
+        if os.path.exists(exec_path):
             try:
-                os.unlink(bin_file)
-                print('Done')
-            except Exception as err:
-                print('Failed')
-                raise Exception(
-                    'Clean of {} failed with error {}'.format(
-                        name,
-                        str(err)
-                    )
-                )
+                os.unlink(exec_path)
+                logger.info('{} removed.'.format(obj.exec_name))
+            except OSError as err:
+                logger.error(str(err))
+    logger.info('Cleaning done.')
 
 
 def list_packages(args):
-    print('Package list:')
-    print('')
-
-    for name, info in PACKAGES.items():
-        print('  {} (source: {})'.format(
-            name, info['download_url']
-        ))
+    for obj in PACKAGES:
+        if os.path.exists(obj.get_exec_path()):
+            print(obj.exec_name)
 
 
 def install_packages(args):
     __create_dirs()
 
-    for name, info in PACKAGES.items():
-        print('Installing {} into {}'.format(
-            name,
-            get_bin_dir()
-        ), end='...')
-        file_name = download(name, info['download_url'])
+    for obj in PACKAGES:
+        print('Installing {} into {}'.format(obj.exec_name, obj.install_dir),
+              end='...')
+
+        file_name = obj.download(TMP_DIR)
 
         with zipfile.ZipFile(file_name, 'r') as z:
-            z.extractall(get_bin_dir())
+            z.extractall(obj.install_dir)
 
-        if not os.path.exists('{}/{}'.format(get_bin_dir(), name)):
-            print('Failed')
-            raise Exception('Installation of {} failed'.format(name))
+        if not os.path.exists(obj.get_exec_path()):
+            raise Exception('Installation of %s failed', obj.exec_path)
         print('Done')
 
 
