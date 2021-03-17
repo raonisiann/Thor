@@ -21,14 +21,13 @@ def main(args):
         type=str,
         help='Environent. Run "thor env list" to show available options.'
     )
-
     args, terraform_args = infra_arg_parser.parse_known_args(args)
-    e = Env(args.env)
-    e.is_valid_or_exit()
 
     if 'env' in args:
-        terraform = Terraform()
-        terraform.run(*terraform_args)
+        with Env(args.env) as env:
+            env.is_valid_or_exit()
+            terraform = Terraform()
+            terraform.run(*terraform_args)
     else:
         infra_arg_parser.print_usage()
         exit(-1)
