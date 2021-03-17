@@ -46,44 +46,39 @@ class ImageParams(object):
     def __getattr__(self, name):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
             if name not in self.__cache:
-                param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
-                self.__cache[name] = self.__read_image_param_value(param_name)
+                try:
+                    value = self.param.get(self.param.get(name))
+                    self.__cache[name] = value
+                except ParameterStoreNotFoundException:
+                    self.__cache[name] = None
             return self.__cache[name]
         else:
             raise AttributeError('Unknown attribute {}'.format(name))
 
     def __setattr__(self, name, value):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
-            param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
-            param_type = ImageParams.RELATIVE_IMAGE_PARAMS[name]['type']
+            self.param.update_or_create(self.get_param_path(name),
+                                        value,
+                                        self.get_param_type(name))
             self.__cache[name] = value
-            self.__write_image_param_value(param_name, value, param_type)
         else:
             super().__setattr__(name, value)
 
     def __delattr__(self, name):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
-            self.param.destroy(self.__get_full_parameter_name(name))
+            self.param.destroy(self.get_param_path(name))
             self.__cache[name] = None
 
-    def __get_full_parameter_name(self, name):
+    def get_param_path(self, name):
+        param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
         return '/thor/{env}/{image}/{param}'.format(
             env=self.env.get_name(),
             image=self.image_name,
-            param=name
+            param=param_name
         )
 
-    def __read_image_param_value(self, name):
-        full_param_path = self.__get_full_parameter_name(name)
-        try:
-            param_value = self.param.get(full_param_path)
-        except ParameterStoreNotFoundException:
-            param_value = None
-        return param_value
-
-    def __write_image_param_value(self, name, value, param_type):
-        full_param_path = self.__get_full_parameter_name(name)
-        self.param.update_or_create(full_param_path, value, param_type)
+    def get_param_type(self, name):
+        return ImageParams.RELATIVE_IMAGE_PARAMS[name]['type']
 
 
 class Image(Base):
