@@ -123,7 +123,7 @@ class ParameterStore(AwsResource):
         except (self.client().exceptions.InternalServerError,
                 self.client().exceptions.InvalidFilterKey,
                 self.client().exceptions.InvalidFilterOption,
-                self.cient().exceptions.InvalidFilterValue,
+                self.client().exceptions.InvalidFilterValue,
                 self.client().exceptions.InvalidKeyId) as err:
             raise ParameterStoreException(str(err))
 
