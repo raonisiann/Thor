@@ -107,15 +107,12 @@ class ParameterStore(AwsResource):
         else:
             return None
 
-    def list(self):
-        param_path = '/{env}'.format(
-            env=self.env.Name()
-        )
+    def list(self, path):
         try:
             response = self.tokenized(
                 self.client().get_parameters_by_path,
                 'Parameters',
-                Path=param_path,
+                Path=path,
                 Recursive=True,
                 WithDecryption=False
             )
