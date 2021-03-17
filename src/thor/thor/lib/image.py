@@ -76,13 +76,13 @@ class ImageParams(object):
         full_param_path = self.__get_full_parameter_name(name)
         try:
             param_value = self.param.get(full_param_path)
-        except ParameterStoreNotFoundException as err:
+        except ParameterStoreNotFoundException:
             param_value = None
         return param_value
 
     def __write_image_param_value(self, name, value, param_type):
         full_param_path = self.__get_full_parameter_name(name)
-        param_value = self.param.update_or_create(full_param_path, value, param_type)
+        self.param.update_or_create(full_param_path, value, param_type)
 
 
 class Image(Base):
