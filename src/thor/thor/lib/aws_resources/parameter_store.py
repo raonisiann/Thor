@@ -107,15 +107,12 @@ class ParameterStore(AwsResource):
         else:
             return None
 
-    def list(self):
-        param_path = '/{env}'.format(
-            env=self.env.Name()
-        )
+    def list(self, path):
         try:
             response = self.tokenized(
                 self.client().get_parameters_by_path,
                 'Parameters',
-                Path=param_path,
+                Path=path,
                 Recursive=True,
                 WithDecryption=False
             )
@@ -123,13 +120,13 @@ class ParameterStore(AwsResource):
         except (self.client().exceptions.InternalServerError,
                 self.client().exceptions.InvalidFilterKey,
                 self.client().exceptions.InvalidFilterOption,
-                self.cient().exceptions.InvalidFilterValue,
+                self.client().exceptions.InvalidFilterValue,
                 self.client().exceptions.InvalidKeyId) as err:
             raise ParameterStoreException(str(err))
 
     def update(self, name, value, param_type=STRING_TYPE):
         self.logger.info('Updating {}'.format(name))
-        self.__put_parameter(name, value, param_type, overwrite=False)
+        self.__put_parameter(name, value, param_type, overwrite=True)
 
     def update_or_create(self, name, value, param_type):
         self.logger.info('Updating (overwrite=true) {}'.format(name))

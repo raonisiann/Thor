@@ -2,6 +2,10 @@ import logging
 import time
 
 
+class AwsResourceKeyException(Exception):
+    pass
+
+
 class AwsResourceTimeoutException(Exception):
     pass
 
@@ -57,12 +61,12 @@ class AwsResource:
             status=status
         ))
 
-    def tokenized(func, key, **kwargs):
+    def tokenized(self, func, key, *args, **kwargs):
         results = []
-        response = func(**kwargs)
+        response = func(*args, **kwargs)
 
         if response and key not in response:
-            raise AwsClientException(
+            raise AwsResourceKeyException(
                 '{} does not exist in response'.format(key)
             )
         [results.append(v) for v in response[key] if v]

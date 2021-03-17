@@ -1,82 +1,109 @@
 import argparse
-from thor.lib.param import (
-    Param,
-    ParamException,
-    ParamTypeNotSupportedException
+from thor.lib.env import Env
+from thor.lib.aws_resources.parameter_store import (
+    ParameterStore,
+    ParameterStoreException,
+    ParameterStoreAlreadyExistsException,
+    ParameterStoreNotFoundException
 )
 
 
-def create_param_cmd(args):
-    param_value = input('Enter Param value: ')
-    p = Param(args.env)
-    print('Creating param {}'.format(args.name))
-    version = p.create_param(args.name, param_value, 'String')
+def get_param_path(env, name):
+    return '/thor/{env}/{param}'.format(
+        env=env.get_name(),
+        param=name
+    )
 
-    if version:
-        print('Parameter created successful. Version {}'.format(version))
-    else:
-        print('Something went wrong while creating parameter')
+
+def create_param_cmd(args):
+    param_path = get_param_path(args.env, args.name)
+    param = ParameterStore(args.env)
+
+    try:
+        param_value = input('Enter Param value: ')
+    except KeyboardInterrupt:
+        print('\nCancelled by user')
+        exit(1)
+    print('Creating param {}'.format(args.name))
+
+    try:
+        param.create(param_path, param_value)
+        print('Parameter created successful.')
+    except ParameterStoreAlreadyExistsException:
+        print('Parameter already exists.')
+    except ParameterStoreException as err:
+        print(str(err))
 
 
 def delete_param_cmd(args):
-    p = Param(args.env)
+    param_path = get_param_path(args.env, args.name)
+    param = ParameterStore(args.env)
 
-    if args.no_safety:
-        result = p.delete_param(args.name)
-    else:
+    if not args.no_safety:
         print('Confirm parameter deletion. Use --no-safety to avoid prompts.')
         proceed = input('Are you sure? [default no] ')
 
-        if proceed == 'yes':
-            result = p.delete_param(args.name)
-        else:
+        if not proceed == 'yes':
             print('Operation cancelled.')
             exit(-1)
-
-    if result:
-        print('Parameter {} deleted'.format(args.name))
+    try:
+        param.destroy(param_path)
+        print('Parameter {} deleted.'.format(args.name))
+    except ParameterStoreNotFoundException:
+        print('Parameter not found.')
 
 
 def describe_param_cmd(args):
-    p = Param(args.env)
-    details = p.describe_param(args.name)
+    param_path = get_param_path(args.env, args.name)
+    param = ParameterStore(args.env)
 
-    if details:
-        for attr, value in details.items():
-            print('{} = {}'.format(attr, value))
+    try:
+        details = param.read(param_path)
+        if details:
+            for attr, value in details.items():
+                print('{} = {}'.format(attr, value))
+    except ParameterStoreNotFoundException:
+        # we don't want to print anything if parameter doesnt exist.
+        pass
 
 
 def get_param_cmd(args):
-    p = Param(args.env)
-    param_value = p.get_param(args.name)
-    print(param_value)
+    param_path = get_param_path(args.env, args.name)
+    param = ParameterStore(args.env)
+
+    try:
+        param_value = param.get(param_path)
+        print(param_value)
+    except ParameterStoreNotFoundException:
+        # we don't want to print anything if parameter doesnt exist.
+        pass
 
 
 def list_param_cmd(args):
-    p = Param(args.env)
+    param = ParameterStore(args.env)
+    param_path = get_param_path(args.env, '')
 
-    for param in p.list_param():
-        print('{}'.format(param))
+    for param in param.list(param_path):
+        print('{}'.format(param['Name']))
 
 
 def update_param_cmd(args):
+    param_path = get_param_path(args.env, args.name)
+    param = ParameterStore(args.env)
+
+    try:
+        param_value = input('Enter new value: ')
+    except KeyboardInterrupt:
+        print('\nCancelled by user')
+        exit(1)
     print('Updating param {}...'.format(args.name))
-    param_value = input('Enter new value: ')
-    p = Param(args.env)
-    current_param = p.describe_param(args.name)
 
-    if current_param:
-        new_version = p.update_param(args.name, param_value)
-
-        if new_version:
-            print('Parameter updated from {} --> {} version.'.format(
-                current_param['Version'],
-                new_version
-            ))
-        else:
-            print('Something went wrong while updating parameter')
-    else:
-        print('Something went wrong while getting parameter')
+    try:
+        param.update(param_path, param_value)
+    except ParameterStoreNotFoundException:
+        print('Param not found')
+    except ParameterStoreException as err:
+        print(str(err))
 
 
 def main(args):
