@@ -1,13 +1,7 @@
-import argparse
 import json
 import os
-import sys
-from thor.lib.aws_ami_finder import AwsAmiFinder
 from thor.lib.base import Base
-from thor.lib.env import Env
 from thor.lib.config import Config
-from thor.lib.packer import Packer
-from thor.lib.param import Param
 from thor.lib.aws_resources.parameter_store import (
     ParameterStore,
     ParameterStoreNotFoundException
@@ -43,48 +37,49 @@ class ImageParams(object):
         }
     }
 
-    def __init__(self, image, env):
-        self.image_name = image
-        self.env = env
-        self.param = ParameterStore(env)
-        self.__cache = {}
+    def __init__(self, image):
+        self.image = image
+        self.param = ParameterStore(self.image.env)
+        self.cache = {}
 
     def __getattr__(self, name):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
-            if name not in self.__cache:
-                param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
-                self.__cache[name] = self.__read_image_param_value(param_name)
-            return self.__cache[name]
+            if name not in self.cache:
+                try:
+                    value = self.param.get(self.get_param_path(name))
+                    self.cache[name] = value
+                except ParameterStoreNotFoundException:
+                    self.cache[name] = None
+            return self.cache[name]
         else:
-            raise AttributeError('Unknown attribute {}'.format(name))
+            return self.__dict__[name]
 
     def __setattr__(self, name, value):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
-            param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
-            param_type = ImageParams.RELATIVE_IMAGE_PARAMS[name]['type']
-            self.__cache[name] = value
-            self.__write_image_param_value(param_name, value, param_type)
+            self.param.update_or_create(self.get_param_path(name),
+                                        value,
+                                        self.get_param_type(name))
+            self.cache[name] = value
         else:
-            super().__setattr__(name, value)
+            self.__dict__[name] = value
 
-    def __get_full_parameter_name(self, name):
+    def __delattr__(self, name):
+        if name in ImageParams.RELATIVE_IMAGE_PARAMS:
+            self.param.destroy(self.get_param_path(name))
+            self.cache[name] = None
+        else:
+            del(self.__dict__[name])
+
+    def get_param_path(self, name):
+        param_name = ImageParams.RELATIVE_IMAGE_PARAMS[name]['name']
         return '/thor/{env}/{image}/{param}'.format(
-            env=self.env.get_name(),
-            image=self.image_name,
-            param=name
+            env=self.image.env.get_name(),
+            image=self.image.get_name(),
+            param=param_name
         )
 
-    def __read_image_param_value(self, name):
-        full_param_path = self.__get_full_parameter_name(name)
-        try:
-            param_value = self.param.get(full_param_path)
-        except ParameterStoreNotFoundException as err:
-            param_value = None
-        return param_value
-
-    def __write_image_param_value(self, name, value, param_type):
-        full_param_path = self.__get_full_parameter_name(name)
-        param_value = self.param.update_or_create(full_param_path, value, param_type)
+    def get_param_type(self, name):
+        return ImageParams.RELATIVE_IMAGE_PARAMS[name]['type']
 
 
 class Image(Base):
@@ -113,7 +108,7 @@ class Image(Base):
         self.files_dir = None
         self.image_files_list = None
         self.instance_type = instance_type
-        self.params = ImageParams(name, env)
+        self.params = ImageParams(self)
         self.__config = Config(Image.CONFIG_FILE_PATH.format(
                                image_dir=self.get_image_dir()))
         self.__saved_dir = None
@@ -146,8 +141,8 @@ class Image(Base):
             try:
                 self.logger.info('Removing manifest file...')
                 os.remove(manifest_file_path)
-            except OSError as err:
-                self.logger.warning('Fail to remove {}'.format(manifest_file_path))
+            except OSError:
+                self.logger.warning('Fail to remove %s', manifest_file_path)
 
     def config(self):
         return self.__config
@@ -406,7 +401,7 @@ class Image(Base):
 
     def rotate_ami_id_list(self, ami_id, ami_id_list):
         '''
-        Rotate AMI string list making ami_id to apear at the 
+        Rotate AMI string list making ami_id to apear at the
         begining of the list
 
         ami_id (str): ami-444444

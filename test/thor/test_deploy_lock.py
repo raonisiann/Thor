@@ -1,4 +1,3 @@
-from thor.lib.aws_resources.parameter_store import ParameterStoreAlreadyExistsException
 from thor.lib.deploy import (
     DeployLock,
     DeployLockAlreadyAcquiredException
@@ -6,7 +5,11 @@ from thor.lib.deploy import (
 from thor.lib.env import Env
 from thor.lib.image import Image
 from unittest import TestCase
-from unittest.mock import patch, Mock
+
+
+class MockImageParams():
+    def __init__(self):
+        self.deploy_lock = None
 
 
 class TestDeployLock(TestCase):
@@ -15,23 +18,23 @@ class TestDeployLock(TestCase):
         self.fake_env = Env('fake')
         self.fake_image = Image(self.fake_env, 'fake_image')
 
-    @patch('thor.lib.deploy.ParameterStore')
-    def test_lock_acquired(self, mock_param):
+    def test_lock_acquired(self):
+        self.fake_image.params = MockImageParams()
         deploy_lock = DeployLock(self.fake_image)
-        mock_param.create.return_value = 'created'
         self.assertIsInstance(deploy_lock.acquire(), DeployLock)
+        self.assertEqual(deploy_lock.lock, self.fake_image.params.deploy_lock)
 
-    @patch('thor.lib.deploy.ParameterStore.create', Mock(side_effect=ParameterStoreAlreadyExistsException()))
     def test_lock_already_acquired(self):
+        self.fake_image.params = MockImageParams()
+        self.fake_image.params.deploy_lock = 'test-already-acquired'
         deploy_lock = DeployLock(self.fake_image)
         with self.assertRaises(DeployLockAlreadyAcquiredException):
             deploy_lock.acquire()
-            mock_param.create.assert_called_once()
 
-    @patch('thor.lib.deploy.ParameterStore')
-    def test_release(self, mock_param):
+    def test_release(self):
+        self.fake_image.params = MockImageParams()
+        self.fake_image.params.deploy_lock = 'test'
         deploy_lock = DeployLock(self.fake_image)
-        mock_param.destroy.return_value = 'deleted'
         deploy_lock.lock = 'test'
         deploy_lock.release()
         self.assertEqual(deploy_lock.lock, '')
