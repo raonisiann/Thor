@@ -53,20 +53,12 @@ class Deploy(Base):
 
 class DeployLock(Base):
 
-    LOCK_PARAM = '/{env}/{image}/deploy/lock'
     LOCK_TEMPLATE = 'owner={owner},timestamp={timestamp}'
 
     def __init__(self, image):
         super().__init__()
         self.image = image
-        self.param = ParameterStore(image.env)
         self.lock = ''
-
-    def __get_lock_param(self):
-        return DeployLock.LOCK_PARAM.format(
-            env=self.image.env.Name(),
-            image=self.image.Name()
-        )
 
     def __generate_lock_info(self):
         timestamp = int(datetime.now().timestamp())
@@ -76,26 +68,22 @@ class DeployLock(Base):
             timestamp=timestamp
         )
 
-    def read_lock_info(self):
-        return self.param.read(self.__get_lock_param())
-
     def acquire(self):
         self.logger.info('Acquiring...')
         self.lock = self.__generate_lock_info()
 
-        try:
-            self.param.create(self.__get_lock_param(), self.lock)
-            return self
-        except ParameterStoreAlreadyExistsException:
+        if self.image.params.deploy_lock is not None:
             raise DeployLockAlreadyAcquiredException()
+        self.image.params.deploy_lock = self.lock
+        return self
 
     def release_force(self):
-        self.param.destroy(self.__get_lock_param())
+        del(self.image.params.deploy_lock)
 
     def release(self):
         self.logger.info('Releasing...')
         if self.lock:
-            self.param.destroy(self.__get_lock_param())
+            self.release_force()
             self.lock = ''
 
     def __enter__(self):
