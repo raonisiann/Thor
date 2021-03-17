@@ -1,7 +1,6 @@
-import argparse
-import json
 import os
 from thor.lib.aws import Aws
+from thor.lib.base import Base
 from thor.lib.config import Config
 
 
@@ -9,7 +8,7 @@ class EnvException(Exception):
     pass
 
 
-class Env:
+class Env(Base):
 
     ROOT_FOLDER = '{}/environments'.format(os.getcwd())
     CONFIG_FILE_PATH = '{env_dir}/config.json'
@@ -17,6 +16,7 @@ class Env:
     __AWS_CLIENT_CACHE = {}
 
     def __init__(self, name=None):
+        super().__init__()
         self.name = name
         self.path = '{base}/{env}'.format(
             base=Env.ROOT_FOLDER,
