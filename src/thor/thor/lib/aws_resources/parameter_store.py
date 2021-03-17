@@ -129,7 +129,7 @@ class ParameterStore(AwsResource):
 
     def update(self, name, value, param_type=STRING_TYPE):
         self.logger.info('Updating {}'.format(name))
-        self.__put_parameter(name, value, param_type, overwrite=False)
+        self.__put_parameter(name, value, param_type, overwrite=True)
 
     def update_or_create(self, name, value, param_type):
         self.logger.info('Updating (overwrite=true) {}'.format(name))
