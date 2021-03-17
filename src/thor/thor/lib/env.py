@@ -108,6 +108,7 @@ class Env:
         env_dir = self.get_env_path()
 
         try:
+            self.logger.info('cd %s', env_dir)
             os.chdir(env_dir)
             return self
         except Exception as err:
@@ -117,6 +118,7 @@ class Env:
             ))
 
     def __exit__(self, type, value, traceback):
+        self.logger.info('leaving directory %s', self.__saved_dir)
         os.chdir(self.__saved_dir)
         self.__saved_dir = None
 
