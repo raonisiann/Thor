@@ -10,10 +10,6 @@ from thor.lib.aws_resources.launch_template import (
     LaunchTemplate,
     LaunchTemplateException
 )
-from thor.lib.aws_resources.parameter_store import (
-    ParameterStore,
-    ParameterStoreAlreadyExistsException
-)
 from thor.lib.utils.names_generator import random_string
 
 
