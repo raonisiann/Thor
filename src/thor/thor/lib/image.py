@@ -64,6 +64,7 @@ class ImageParams(object):
     def __delattr__(self, name):
         if name in ImageParams.RELATIVE_IMAGE_PARAMS:
             self.param.destroy(self.__get_full_parameter_name(name))
+            self.__cache[name] = None
 
     def __get_full_parameter_name(self, name):
         return '/thor/{env}/{image}/{param}'.format(
