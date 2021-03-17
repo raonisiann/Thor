@@ -144,8 +144,8 @@ class Image(Base):
             try:
                 self.logger.info('Removing manifest file...')
                 os.remove(manifest_file_path)
-            except OSError as err:
-                self.logger.warning('Fail to remove {}'.format(manifest_file_path))
+            except OSError:
+                self.logger.warning('Fail to remove %s', manifest_file_path)
 
     def config(self):
         return self.__config
@@ -404,7 +404,7 @@ class Image(Base):
 
     def rotate_ami_id_list(self, ami_id, ami_id_list):
         '''
-        Rotate AMI string list making ami_id to apear at the 
+        Rotate AMI string list making ami_id to apear at the
         begining of the list
 
         ami_id (str): ami-444444
