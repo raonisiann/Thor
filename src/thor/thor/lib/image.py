@@ -1,13 +1,7 @@
-import argparse
 import json
 import os
-import sys
-from thor.lib.aws_ami_finder import AwsAmiFinder
 from thor.lib.base import Base
-from thor.lib.env import Env
 from thor.lib.config import Config
-from thor.lib.packer import Packer
-from thor.lib.param import Param
 from thor.lib.aws_resources.parameter_store import (
     ParameterStore,
     ParameterStoreNotFoundException
