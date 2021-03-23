@@ -103,6 +103,15 @@ class Env(Base):
     def get_env_path(self):
         return self.path
 
+    def get_env_dir(self):
+        return self.path
+
+    def get_variables_file(self):
+        return '{env_dir}/variables.json'.format(
+            env_dir=self.get_env_dir()
+        )
+
+
     def __enter__(self):
         self.__saved_dir = os.getcwd()
         env_dir = self.get_env_path()

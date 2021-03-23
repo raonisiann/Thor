@@ -86,8 +86,9 @@ class Image(Base):
 
     BUILD_FAIL_CODE = -1
 
-    IMAGE_DIR_TEMPLATE = '{env_dir}/images/{name}'
+    IMAGE_DIR_TEMPLATE = '{base_dir}/images/{name}'
     FILES_DIR_TEMPLATE = '{image_dir}/files'
+
 
     PACKER_FILE = 'packer.json'
     # parameters
@@ -186,11 +187,39 @@ class Image(Base):
     def Name(self):
         return self.name
 
+    def get_variables_file(self):
+        return '{img_dir}/variables.json'.format(
+            img_dir=self.get_image_dir()
+        )
+
+    def get_template_files(self):
+        if os.path.isdir(self.get_template_dir()):
+            return list(os.walk(self.get_template_dir()))
+        else:
+            return []
+
+    def get_static_files(self):
+        if os.path.isdir(self.get_static_dir()):
+            tree = os.walk(self.get_static_dir())
+            return tree
+        else:
+            return []
+
+    def get_static_dir(self):
+        return '{img_dir}/static'.format(
+            img_dir=self.get_image_dir()
+        )
+
+    def get_template_dir(self):
+        return '{img_dir}/templates'.format(
+            img_dir=self.get_image_dir()
+        )
+
     def get_image_dir(self):
 
         if self.image_dir is None:
-            self.image_dir = '{env_dir}/images/{name}'.format(
-                env_dir=self.env.get_env_path(),
+            self.image_dir = Image.IMAGE_DIR_TEMPLATE.format(
+                base_dir=os.getcwd(),
                 name=self.name
             )
         return self.image_dir
@@ -198,7 +227,7 @@ class Image(Base):
     def get_files_dir(self):
 
         if self.files_dir is None:
-            self.files_dir = '{image_dir}/files'.format(
+            self.files_dir = Image.FILES_DIR_TEMPLATE.format(
                 image_dir=self.get_image_dir()
             )
         return self.files_dir
@@ -214,6 +243,21 @@ class Image(Base):
                 self.__get_image_files_list_rec(file_path, file_list)
             else:
                 file_list.append(file_path)
+
+    def __get_relative_file_list_recursive(self, path, file_list):
+        base_dir = '{img_dir}/{path}'.format(img_dir=self.get_image_dir(),
+                                             path=path)
+        for entry in os.listdir(base_dir):
+            dir_entry = '{base_dir}/{entry}'.format(
+                base_dir=base_dir,
+                entry=entry
+            )
+            relative_path = '{path}/{sub_path}'.format(path=path,
+                                                       sub_path=entry)
+            if os.path.isdir(dir_entry):
+                self.__get_image_files_list_rec(relative_path, file_list)
+            else:
+                file_list.append(relative_path)
 
     def get_image_files_list(self):
 
