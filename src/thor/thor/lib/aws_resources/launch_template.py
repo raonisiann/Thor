@@ -20,6 +20,9 @@ class LaunchTemplate(AwsResource):
             lt_data['ImageId'] = params['image_id']
         if 'instance_type' in params:
             lt_data['InstanceType'] = params['instance_type']
+        if 'iam_instance_profile_arn' in params:
+            lt_data['IamInstanceProfile'] = {}
+            lt_data['IamInstanceProfile']['Arn'] = params['iam_instance_profile_arn']
         if 'key_pair' in params:
             lt_data['KeyName'] = params['key_pair']
         if 'security_group_ids' in params:
@@ -32,7 +35,7 @@ class LaunchTemplate(AwsResource):
         return parsed_params
 
     def create(self, name, image_id, instance_type, key_pair=None,
-               security_group_ids=None):
+               security_group_ids=None, iam_instance_profile_arn=None):
         saved_params = locals()
         try:
             parsed_params = self.__parse_params(saved_params)
