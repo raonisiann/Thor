@@ -110,22 +110,6 @@ class DeployBlueGreen(Deploy):
         self.is_first_deploy_ever = False
         self.launch_template = LaunchTemplate(image.env)
 
-    def __sanitize_config(self, config_dict):
-        '''
-        Remove keys that don't have valid values like
-        empty strings, lists and
-        '''
-        sanitized = {}
-        if config_dict:
-            for k, v in config_dict.items():
-                if v:
-                    sanitized[k] = v
-                if type(v) is int:
-                    sanitized[k] = v
-                if type(v) is bool:
-                    sanitized[k] = v
-        return sanitized
-
     def settle_down(self, seconds=30):
         self.logger.info('Settle down for %s seconds', seconds)
         time.sleep(30)
@@ -208,7 +192,7 @@ class DeployBlueGreen(Deploy):
         autoscaling_config['name'] = new_autoscaling_name
         autoscaling_config['desired_capacity'] = desired_capacity
         autoscaling_config['launch_template_name'] = launch_template_name
-        autoscaling_config = self.__sanitize_config(autoscaling_config)
+        autoscaling_config = autoscaling_config
 
         try:
             self.autoscaling.create(**autoscaling_config)
