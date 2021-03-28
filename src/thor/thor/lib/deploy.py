@@ -163,8 +163,10 @@ class DeployBlueGreen(Deploy):
         if 'instance_type' not in config:
             raise DeployException('instance_type not defined in config file')
 
+        config['image_id'] = self.ami_id
+
         try:
-            self.launch_template.create(name, self.ami_id, **config)
+            self.launch_template.create(name, config)
         except LaunchTemplateException as err:
             raise DeployException(str(err))
 
@@ -189,13 +191,11 @@ class DeployBlueGreen(Deploy):
                                       'for running auto scaling.')
 
         autoscaling_config = self.image.config().get_by_prefix('scaling')
-        autoscaling_config['name'] = new_autoscaling_name
         autoscaling_config['desired_capacity'] = desired_capacity
-        autoscaling_config['launch_template_name'] = launch_template_name
-        autoscaling_config = autoscaling_config
 
         try:
-            self.autoscaling.create(**autoscaling_config)
+            self.autoscaling.create(new_autoscaling_name,
+                                    launch_template_name, autoscaling_config)
             self.created_resources['autoscaling'] = new_autoscaling_name
         except AutoScalingException as err:
             raise DeployException(str(err))
