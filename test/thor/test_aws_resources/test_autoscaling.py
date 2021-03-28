@@ -8,11 +8,6 @@ class TestAutoScalingGroup(TestCase):
     def setUp(self):
         self.env = Env('test')
 
-    def test_parse_params_only_name(self):
-        autoscaling = AutoScaling(self.env)
-        result = autoscaling._AutoScaling__parse_params({'name': 'test'})
-        self.assertDictEqual(result, {'AutoScalingGroupName': 'test'})
-
     def test_is_instance_healthy_true(self):
         autoscaling = AutoScaling(self.env)
         fake_health_input = {
