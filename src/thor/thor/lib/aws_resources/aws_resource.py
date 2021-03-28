@@ -30,6 +30,43 @@ class AwsResource:
             self.alias = self.client_name
         self.logger = logging.getLogger('Resource.{}'.format(self.alias))
 
+    def __translate_dict_to_boto3_config(self, old):
+        new = {}
+        for k, v in old.items():
+            new_key = self.__translate_to_aws_config_names(k)
+            if type(v) is dict:
+                new[new_key] = self.__translate_dict_to_boto3_config(v)
+            elif type(v) is list:
+                print('list')
+                new[new_key] = []
+                for item in v:
+                    if type(item) is dict:
+                        new[new_key].append(
+                            self.__translate_dict_to_boto3_config(item))
+                    else:
+                        new[new_key].append(item)
+            else:
+                if len(str(v)):
+                    new[new_key] = v
+        return new
+
+    def __translate_to_aws_config_names(self, name):
+        translated = []
+        i = 0
+        while i < len(name):
+            if i == 0:
+                translated.append(name[0].upper())
+            elif name[i] == '_':
+                translated.append(name[i+1].upper())
+                i += 1
+            else:
+                translated.append(name[i])
+            i += 1
+        return ''.join(translated)
+
+    def translate_dict_to_aws_config_names(self, input_dict):
+        return self.__translate_dict_to_boto3_config(input_dict)
+
     def sanitize_dict(self, input_dict):
         '''
         Remove keys that have empty values like
