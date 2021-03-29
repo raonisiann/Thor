@@ -22,8 +22,8 @@ class LaunchTemplate(AwsResource):
                 LaunchTemplateData=data
             )
             if 'LaunchTemplate' in response:
+                self.logger.info('Created')
                 return response['LaunchTemplate']['LaunchTemplateName']
-            self.logger.info('Created')
         except Exception as err:
             raise LaunchTemplateException(str(err))
 
