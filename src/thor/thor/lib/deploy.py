@@ -133,18 +133,26 @@ class DeployBlueGreen(Deploy):
             self.logger.info('No running autoscaling groups were found.')
             self.is_first_deploy_ever = True
         else:
-            asg_data = self.autoscaling.read(
-                           running_autoscaling)
-            self.logger.info('Found running autoscaling %s',
-                             asg_data['AutoScalingGroupName'])
-            self.logger.info('%s Current Capacity = %s',
-                             asg_data['AutoScalingGroupName'],
-                             asg_data['DesiredCapacity'])
-            self.running_resources['autoscaling'] = asg_data
+            try:
+                asg_data = self.autoscaling.read(running_autoscaling)
+                self.logger.info('Found running autoscaling %s',
+                                 asg_data['AutoScalingGroupName'])
+                self.logger.info('%s Current Capacity = %s',
+                                 asg_data['AutoScalingGroupName'],
+                                 asg_data['DesiredCapacity'])
+                self.running_resources['autoscaling'] = asg_data
 
-            if 'LaunchTemplate' in asg_data:
-                lt_name = asg_data['LaunchTemplate']['LaunchTemplateName']
-                self.running_resources['launch_template'] = lt_name
+                if 'LaunchTemplate' in asg_data:
+                    lt_name = asg_data['LaunchTemplate']['LaunchTemplateName']
+                    self.running_resources['launch_template'] = lt_name
+            except AutoScalingException:
+                self.logger.warning(
+                    'Unable to read AutoScaling {}. '
+                    'The auto scaling no longer exists or '
+                    'you dont have permissions to read it.'.format(
+                        running_autoscaling))
+                self.do_blue_green_rollback()
+                self.abort()
 
         self.logger.info('Pre init step completed.')
 
