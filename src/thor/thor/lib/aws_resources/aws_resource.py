@@ -37,7 +37,6 @@ class AwsResource:
             if type(v) is dict:
                 new[new_key] = self.__translate_dict_to_boto3_config(v)
             elif type(v) is list:
-                print('list')
                 new[new_key] = []
                 for item in v:
                     if type(item) is dict:
