@@ -110,22 +110,6 @@ class DeployBlueGreen(Deploy):
         self.is_first_deploy_ever = False
         self.launch_template = LaunchTemplate(image.env)
 
-    def __sanitize_config(self, config_dict):
-        '''
-        Remove keys that don't have valid values like
-        empty strings, lists and
-        '''
-        sanitized = {}
-        if config_dict:
-            for k, v in config_dict.items():
-                if v:
-                    sanitized[k] = v
-                if type(v) is int:
-                    sanitized[k] = v
-                if type(v) is bool:
-                    sanitized[k] = v
-        return sanitized
-
     def settle_down(self, seconds=30):
         self.logger.info('Settle down for %s seconds', seconds)
         time.sleep(30)
@@ -149,18 +133,26 @@ class DeployBlueGreen(Deploy):
             self.logger.info('No running autoscaling groups were found.')
             self.is_first_deploy_ever = True
         else:
-            asg_data = self.autoscaling.read(
-                           running_autoscaling)
-            self.logger.info('Found running autoscaling %s',
-                             asg_data['AutoScalingGroupName'])
-            self.logger.info('%s Current Capacity = %s',
-                             asg_data['AutoScalingGroupName'],
-                             asg_data['DesiredCapacity'])
-            self.running_resources['autoscaling'] = asg_data
+            try:
+                asg_data = self.autoscaling.read(running_autoscaling)
+                self.logger.info('Found running autoscaling %s',
+                                 asg_data['AutoScalingGroupName'])
+                self.logger.info('%s Current Capacity = %s',
+                                 asg_data['AutoScalingGroupName'],
+                                 asg_data['DesiredCapacity'])
+                self.running_resources['autoscaling'] = asg_data
 
-            if 'LaunchTemplate' in asg_data:
-                lt_name = asg_data['LaunchTemplate']['LaunchTemplateName']
-                self.running_resources['launch_template'] = lt_name
+                if 'LaunchTemplate' in asg_data:
+                    lt_name = asg_data['LaunchTemplate']['LaunchTemplateName']
+                    self.running_resources['launch_template'] = lt_name
+            except AutoScalingException:
+                self.logger.warning(
+                    'Unable to read AutoScaling {}. '
+                    'The auto scaling no longer exists or '
+                    'you dont have permissions to read it.'.format(
+                        running_autoscaling))
+                self.do_blue_green_rollback()
+                self.abort()
 
         self.logger.info('Pre init step completed.')
 
@@ -179,8 +171,10 @@ class DeployBlueGreen(Deploy):
         if 'instance_type' not in config:
             raise DeployException('instance_type not defined in config file')
 
+        config['image_id'] = self.ami_id
+
         try:
-            self.launch_template.create(name, self.ami_id, **config)
+            self.launch_template.create(name, config)
         except LaunchTemplateException as err:
             raise DeployException(str(err))
 
@@ -205,13 +199,11 @@ class DeployBlueGreen(Deploy):
                                       'for running auto scaling.')
 
         autoscaling_config = self.image.config().get_by_prefix('scaling')
-        autoscaling_config['name'] = new_autoscaling_name
         autoscaling_config['desired_capacity'] = desired_capacity
-        autoscaling_config['launch_template_name'] = launch_template_name
-        autoscaling_config = self.__sanitize_config(autoscaling_config)
 
         try:
-            self.autoscaling.create(**autoscaling_config)
+            self.autoscaling.create(new_autoscaling_name,
+                                    launch_template_name, autoscaling_config)
             self.created_resources['autoscaling'] = new_autoscaling_name
         except AutoScalingException as err:
             raise DeployException(str(err))

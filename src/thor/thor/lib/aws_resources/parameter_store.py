@@ -26,27 +26,14 @@ class ParameterStore(AwsResource):
     def __init__(self, env):
         super().__init__('ssm', env, alias='parameter')
 
-    def __parse_params(self, params):
-        parsed_config = {}
-        if 'name' in params:
-            parsed_config['Name'] = params['name']
-        if 'value' in params:
-            parsed_config['Value'] = params['value']
-        if 'param_type' in params:
-            parsed_config['Type'] = params['param_type']
-        if 'with_decryption' in params:
-            parsed_config['WithDecryption'] = params['with_decryption']
-        if 'overwrite' in params:
-            parsed_config['Overwrite'] = params['overwrite']
-        if 'recursive' in params:
-            parsed_config['Recursive'] = params['recursive']
-        return parsed_config
-
     def __put_parameter(self, name, value, param_type, overwrite):
-        saved_params = locals()
         try:
-            response = self.client().put_parameter(
-                **self.__parse_params(saved_params)
+            self.client().put_parameter(
+                Name=name,
+                Value=value,
+                Type=param_type,
+                Overwrite=overwrite,
+                Tier='Standard'
             )
         except self.client().exceptions.ParameterAlreadyExists:
             raise ParameterStoreAlreadyExistsException(name)
@@ -71,22 +58,21 @@ class ParameterStore(AwsResource):
         self.__put_parameter(name, value, param_type, overwrite=False)
 
     def destroy(self, name):
-        saved_params = locals()
         try:
             self.logger.info('Destroying {}'.format(name))
-            response = self.client().delete_parameter(
-                **self.__parse_params(saved_params)
+            self.client().delete_parameter(
+                Name=name
             )
             self.logger.info('{} destroyed.'.format(name))
         except self.client().exceptions.ParameterNotFound:
             raise ParameterStoreNotFoundException()
 
-    def read(self, name):
-        saved_params = locals()
+    def read(self, name, with_decryption=False):
         try:
             self.logger.info('Reading {}'.format(name))
             response = self.client().get_parameter(
-                **self.__parse_params(saved_params)
+                Name=name,
+                WithDecryption=with_decryption
             )
             if 'Parameter' in response:
                 return response['Parameter']
