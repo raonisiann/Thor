@@ -138,7 +138,8 @@ class AutoScaling(AwsResource):
         self.logger.info('Terminating {}...'.format(name))
 
         try:
-            self.update(name, min_capacity=0)
+            config = {"min_size": 0}
+            self.update(name, config)
         except AutoScalingActivityInProgress:
             raise AutoScalingException('Can\'t proceed with destroy.'
                                        'AutoScaling activity in progress.')
@@ -189,9 +190,8 @@ class AutoScaling(AwsResource):
                 AutoScalingGroupNames=[name]
             )
 
-            if 'AutoScalingGroups' not in response:
+            if not len(response['AutoScalingGroups']) == 1:
                 raise AutoScalingException('No AutoScaling groups were found')
-
             return response['AutoScalingGroups'][0]
         except self.client().exceptions.InvalidNextToken as err:
             raise AutoScalingException(str(err))
