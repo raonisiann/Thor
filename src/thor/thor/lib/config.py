@@ -20,12 +20,12 @@ class Config(Base):
 
     def lazy_load_config(self):
         if self.loaded_config is None:
+            content = {}
             if os.path.exists(self.config_path):
                 self.logger.info('Loading config file %s', self.config_path)
                 with open(self.config_path) as f:
-                    return json.loads(f.read())
-            else:
-                self.loaded_config = {}
+                    content = json.loads(f.read())
+            self.loaded_config = content
 
     def __set_config_recursive(self, path, value, config):
         path_splited = path.split('.')
