@@ -3,6 +3,10 @@ import os
 from thor.lib.base import Base
 
 
+class ConfigUnknownKeyException(Exception):
+    pass
+
+
 class ConfigException(Exception):
     pass
 
@@ -12,52 +16,66 @@ class Config(Base):
     def __init__(self, config_path):
         super().__init__()
         self.config_path = config_path
-        self.loaded_config = {}
-
-    def load_config_file(self):
-        if os.path.exists(self.config_path):
-            self.logger.info('Loading config file %s', self.config_path)
-            with open(self.config_path) as f:
-                return json.loads(f.read())
-        # no config file available
-        return None
+        self.loaded_config = None
 
     def lazy_load_config(self):
-        if self.loaded_config:
-            return
-        json_config = self.load_config_file()
-        if json_config:
-            self.__load_config_dict_rec(json_config, '')
-
-    def __load_config_dict_rec(self, node, base):
-        for name, value in node.items():
-            config_path = '{base}.{name}' if base else '{base}{name}'
-            config_path = config_path.format(
-                base=base,
-                name=name
-            )
-            if type(value) is dict:
-                self.__load_config_dict_rec(value, config_path)
+        if self.loaded_config is None:
+            if os.path.exists(self.config_path):
+                self.logger.info('Loading config file %s', self.config_path)
+                with open(self.config_path) as f:
+                    return json.loads(f.read())
             else:
-                self.loaded_config[config_path] = value
+                self.loaded_config = {}
 
-    def get_by_prefix(self, name):
-        self.lazy_load_config()
-        matches = {}
-        for k, v in self.loaded_config.items():
-            if k.startswith(name):
-                matches[k[len(name)+1:]] = v
-        return matches
+    def __set_config_recursive(self, path, value, config):
+        path_splited = path.split('.')
+        left = path_splited[0]
+        new = config
 
-    def get(self, name):
-        self.lazy_load_config()
-        if name in self.loaded_config:
-            return self.loaded_config[name]
+        if type(config) is list and left.isnumeric():
+            left = int(left)
+            try:
+                config[left]
+            except KeyError:
+                config[left] = []
+
+        if type(config) is dict and left not in config:
+            new[left] = {}
+        # recurse to sub nodes...
+        if len(path_splited) > 1:
+            new[left] = self.__set_config_recursive(
+                '.'.join(path_splited[1:]), value, new[left])
         else:
-            return None
+            new[left] = value
 
-    def set(self, name, value):
+        return new
+
+    def __get_config_recursive(self, path):
+        if path == '' or path == '.':
+            return self.loaded_config
+
+        path_splited = path.split('.')
+        config_base = self.loaded_config
+
+        for name in path_splited:
+            try:
+                if type(config_base) is list and name.isnumeric():
+                    name = int(name)
+                config_base = config_base[name]
+            except (IndexError, KeyError):
+                self.logger.error('Cannot access {}'.format(name))
+                raise ConfigUnknownKeyException(name)
+        return config_base
+
+    def get(self, path=''):
         self.lazy_load_config()
-        if name is not str:
-            raise ConfigException('Config name must be an string')
-        self.loaded_config[name] = value
+        return self.__get_config_recursive(path)
+
+    def set(self, path, value):
+        self.lazy_load_config()
+
+        if not path:
+            raise ConfigException('Path cannot be empty')
+
+        self.loaded_config = self.__set_config_recursive(
+            path, value, self.loaded_config)
