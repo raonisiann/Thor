@@ -85,6 +85,6 @@ def main(args):
 
     if args.aws_region:
         logger.info('Overriding AWS Region with = {}'.format(args.aws_region))
-        e.set_config('aws_region', args.aws_region)
+        e.config().set('aws_region', args.aws_region)
 
     build_cmd(args)

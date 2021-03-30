@@ -248,7 +248,7 @@ class Image(Base):
                 'type': 'amazon-ebs',
                 'ami_name': ami_name,
                 'ami_description': ami_description,
-                'region': self.env.get_config('aws_region'),
+                'region': self.env.config().get('aws_region'),
                 'instance_type': self.instance_type,
                 'source_ami': self.aws_ami['ImageId'],
                 'communicator': "ssh",

@@ -79,15 +79,15 @@ def main(args):
 
     if args.aws_region:
         logger.info('Overriding AWS Region with = {}'.format(args.aws_region))
-        e.set_config('aws_region', args.aws_region)
+        e.config().set('aws_region', args.aws_region)
     if args.ami_id:
         logger.info('Overriding AMI ID with = {}'.format(args.ami_id))
-        e.set_config('auto_scaling_settings.ami_id', args.ami_id)
+        e.config().set('launch_template.image_id', args.ami_id)
     if args.autoscaling_name:
         logger.info('Overriding AutoScaling group name with = {}'.format(
                     args.autoscaling_name))
-        e.set_config('auto_scaling_settings.autoscaling_name',
-                     args.autoscaling_name)
+        e.config().set('scaling.auto_scaling_group_name',
+                       args.autoscaling_name)
     # inject environment object on arguments
     args.env = e
     # run deploy

@@ -64,7 +64,7 @@ def generate_cmd(args):
     if 'filters' in args:
         aws_filters = args.filters
 
-    ami_finder = AwsAmiFinder(env.get_config('aws_region'))
+    ami_finder = AwsAmiFinder(env.config().get('aws_region'))
     latest_image = ami_finder.get_latest_image(aws_filters)
     if latest_image:
         img = Image(env, args.image, latest_image)
@@ -162,7 +162,7 @@ def main(args):
 
     if args.aws_region:
         print('Overriding AWS Region with = {}'.format(args.aws_region))
-        e.set_config('aws_region', args.aws_region)
+        e.config().set('aws_region', args.aws_region)
 
     if 'func' in args:
         args.env = e

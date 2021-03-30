@@ -163,7 +163,7 @@ class DeployBlueGreen(Deploy):
             env=self.image.env.Name(),
             rand=random_string()
         )
-        config = self.image.config().get_by_prefix('launch_template')
+        config = self.image.config().get('launch_template')
         if config is None:
             raise DeployException('launch_template is not defined '
                                   'in config file')
@@ -198,7 +198,7 @@ class DeployBlueGreen(Deploy):
                 raise DeployException('Cannot find desired capacity '
                                       'for running auto scaling.')
 
-        autoscaling_config = self.image.config().get_by_prefix('scaling')
+        autoscaling_config = self.image.config().get('scaling')
         autoscaling_config['desired_capacity'] = desired_capacity
 
         try:
