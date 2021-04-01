@@ -135,10 +135,16 @@ class Builder(Base):
 
     def new_artifact(self, path, content):
         try:
-            self.logger.info(f'Generating artifact {path}...')
-            with open(path, 'w') as artifact:
+            # remove template extesion if existing
+            if '.tmpl' == path[-5:]:
+                artifact_file = path[:-5]
+            else:
+                artifact_file = path
+            artifact_relative_name = artifact_file[len(self.build_dir)+1:]
+            self.logger.info(f'Generating artifact {artifact_relative_name}')
+
+            with open(artifact_file, 'w') as artifact:
                 artifact.write(content)
-                artifact_relative_name = path[len(self.build_dir)+1:]
                 self.artifacts.append(artifact_relative_name)
                 self.logger.info('Artifact generated')
         except OSError as err:
