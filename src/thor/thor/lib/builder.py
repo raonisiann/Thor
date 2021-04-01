@@ -110,14 +110,14 @@ class Builder(Base):
             'artifacts': self.get_artifacts()
         }
 
-    def render_template(self, template):
+    def render_template(self, template_path):
         artifact_variables = self.get_artifact_variables()
         variables = self.get_variables()
         thor_variables = self.get_thor_variables()
 
         try:
-            with open(template) as f:
-                self.logger.info(f'Loading template {template}')
+            self.logger.info(f'Loading template {template_path}')
+            with open(template_path) as f:
                 template = Template(f.read())
                 try:
                     self.logger.info('Rendering...')
@@ -141,7 +141,7 @@ class Builder(Base):
             else:
                 artifact_file = path
             artifact_relative_name = artifact_file[len(self.build_dir)+1:]
-            self.logger.info(f'Generating artifact {artifact_relative_name}')
+            self.logger.info(f'Creating artifact => {artifact_relative_name}')
 
             with open(artifact_file, 'w') as artifact:
                 artifact.write(content)
@@ -230,3 +230,5 @@ class Builder(Base):
         self.clean_build_dir()
         self.__create_build_dirs()
         self.build_all()
+        self.logger.info(f'Build dir ==> {self.build_dir}')
+        self.logger.info('Build completed with success!')
