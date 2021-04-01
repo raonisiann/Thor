@@ -9,19 +9,19 @@ from jinja2 import (
 from thor.lib.base import Base
 
 
-class BuilderArtifactGenerationException(Exception):
+class CompilerArtifactGenerationException(Exception):
     pass
 
 
-class BuilderTemplateRenderingException(Exception):
+class CompilerTemplateRenderingException(Exception):
     pass
 
 
-class BuilderException(Exception):
+class CompilerException(Exception):
     pass
 
 
-class Builder(Base):
+class Compiler(Base):
 
     def __init__(self, image):
         super().__init__()
@@ -46,7 +46,7 @@ class Builder(Base):
                 os.makedirs(self.build_dir)
             except OSError as err:
                 self.logger.error(f'Fail to create dir {self.build_dir}')
-                raise BuilderException(str(err))
+                raise CompilerException(str(err))
 
     def __cd(self, path):
         try:
@@ -54,7 +54,7 @@ class Builder(Base):
             os.chdir(path)
         except OSError as err:
             self.logger.error(f'Fail to cd into {path}')
-            raise BuilderException(str(err))
+            raise CompilerException(str(err))
 
     def __enter__(self):
         self.__create_build_dirs()
@@ -129,9 +129,9 @@ class Builder(Base):
                     self.logger.info('Rendering Done!')
                     return rendered
                 except TemplateSyntaxError as err:
-                    BuilderTemplateRenderingException(str(err))
+                    CompilerTemplateRenderingException(str(err))
         except OSError as err:
-            BuilderTemplateRenderingException(str(err))
+            CompilerTemplateRenderingException(str(err))
 
     def new_artifact(self, path, content):
         try:
@@ -149,7 +149,7 @@ class Builder(Base):
                 self.logger.info('Artifact generated')
         except OSError as err:
             self.logger.error('Fail to generated artifact {path}')
-            raise BuilderArtifactGenerationException(str(err))
+            raise CompilerArtifactGenerationException(str(err))
 
     def abort_build(self, reason):
         self.logger.error(reason)
@@ -185,7 +185,7 @@ class Builder(Base):
 
                 try:
                     result = self.render_template(template)
-                except BuilderTemplateRenderingException as err:
+                except CompilerTemplateRenderingException as err:
                     self.abort_build(str(err))
 
                 artifact_path = f'{new_base_dir}/{file_name}'
@@ -193,7 +193,7 @@ class Builder(Base):
                 try:
                     self.new_artifact(artifact_path, result)
                     count += 1
-                except BuilderArtifactGenerationException as err:
+                except CompilerArtifactGenerationException as err:
                     self.abort_build(str(err))
         return count
 
@@ -220,7 +220,7 @@ class Builder(Base):
                         os.remove(entry_path)
                 except OSError as err:
                     self.logger.error(f'Fail to remove {entry_path}')
-                    raise BuilderException(str(err))
+                    raise CompilerException(str(err))
 
     def clean_build_dir(self):
         self.logger.info(f'Cleaning {self.build_dir}')

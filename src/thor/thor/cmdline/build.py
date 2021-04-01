@@ -1,6 +1,6 @@
 import argparse
 import logging
-from thor.lib.builder import Builder
+from thor.lib.compiler import Compiler
 from thor.lib.env import Env
 from thor.lib.image import Image
 from thor.lib.packer import Packer
@@ -14,9 +14,9 @@ def build_cmd(args):
 
     with Image(args.env, args.image, None) as image:
         logger.info('Changing directory to {}'.format(image.get_image_dir()))
-        # builder
-        builder = Builder(image)
-        builder.build()
+        # compiler
+        compiler = Compiler(image)
+        compiler.build()
         exit(0)
         # run packer build
         result = packer.run('build', Image.PACKER_FILE)
