@@ -157,7 +157,42 @@ class Compiler(Base):
         exit(-1)
 
     def build_target_static(self):
-        return 0
+        static_files = self.image.get_static_files()
+        dest_dir = f'{self.build_dir}/static'
+        count = 0
+
+        for entry in static_files:
+            base_dir, sub_dirs, files = entry
+            new_base_dir = base_dir[len(self.image.get_static_dir())+1:]
+
+            if not new_base_dir:
+                new_base_dir = f'{dest_dir}'
+            else:
+                new_base_dir = f'{dest_dir}/{new_base_dir}'
+
+            if not os.path.exists(new_base_dir):
+                try:
+                    self.logger.info(f'Creating dir {new_base_dir}')
+                    os.makedirs(new_base_dir, exist_ok=True)
+                except OSError as err:
+                    self.abort_build(str(err))
+            # copy static files
+            for file_name in files:
+                static_file_name = f'{base_dir}/{file_name}'
+                try:
+                    self.logger.info(f'Copying {static_file_name}')
+                    with open(static_file_name, 'rb') as src:
+                        content = src.read()
+                        dst_file_name = f'{new_base_dir}/{file_name}'
+                        self.logger.info(f'destination => {dst_file_name}')
+                        with open(dst_file_name, 'wb') as dst:
+                            dst.write(content)
+                    self.logger.info('File copy completed with success')
+                    count += 1
+                except OSError as err:
+                    self.logger.error('Fail to copy static file')
+                    self.abort_build(str(err))
+        return count
 
     def build_target_templates(self):
         source_files = self.image.get_template_files()
