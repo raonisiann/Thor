@@ -192,6 +192,13 @@ class Image(Base):
             img_dir=self.get_image_dir()
         )
 
+    def get_packer_file(self):
+        packer_file = f'{self.get_image_dir()}/packer.json'
+        if os.path.exists(packer_file):
+            return packer_file
+        else:
+            return ''
+
     def get_template_files(self):
         if os.path.isdir(self.get_template_dir()):
             return list(os.walk(self.get_template_dir()))

@@ -28,6 +28,7 @@ class Compiler(Base):
         self.image = image
         self.build_targets = {
             'static': self.build_target_static,
+            'packer': self.build_target_packer,
             'templates': self.build_target_templates
         }
         self.build_dir = '{project_dir}/build/{env_name}/{image_name}'.format(
@@ -230,6 +231,21 @@ class Compiler(Base):
                     count += 1
                 except CompilerArtifactGenerationException as err:
                     self.abort_build(str(err))
+        return count
+
+    def build_target_packer(self):
+        count = 0
+        packer_file = self.image.get_packer_file()
+        if packer_file:
+
+            try:
+                dst_packer_file = f'{self.build_dir}/packer.json'
+                result = self.render_template(packer_file)
+                self.new_artifact(dst_packer_file, result)
+                count += 1
+            except CompilerArtifactGenerationException as err:
+                self.abort_build(str(err))
+
         return count
 
     def build_all(self):
