@@ -160,7 +160,7 @@ class DeployBlueGreen(Deploy):
         # create new launch configuration
         name = 'LT_{image}_{env}_{rand}'.format(
             image=self.image.get_name(),
-            env=self.image.env.Name(),
+            env=self.image.env.get_name(),
             rand=random_string()
         )
         config = self.image.config().get('launch_template')
@@ -184,7 +184,7 @@ class DeployBlueGreen(Deploy):
     def create_autoscaling(self, launch_template_name):
         new_autoscaling_name = 'ASG_{image}_{env}_{rand}'.format(
             image=self.image.get_name(),
-            env=self.image.env.Name(),
+            env=self.image.env.get_name(),
             rand=random_string()
         )
 

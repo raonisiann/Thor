@@ -8,6 +8,10 @@ from thor.lib.aws_resources.parameter_store import (
 )
 
 
+class ImageInvalidException(Exception):
+    pass
+
+
 class ImageException(Exception):
     pass
 
@@ -115,19 +119,12 @@ class Image(Base):
         self.__saved_dir = None
 
     def __enter__(self):
-        self.__saved_dir = os.getcwd()
-        image_dir = self.get_image_dir()
-
         try:
-            os.chdir(image_dir)
+            self.__saved_dir = os.getcwd()
+            os.chdir(self.image_dir)
             return self
-        except Exception as err:
-            raise ImageException(
-                'Cannot change dir to {} with error {}'.format(
-                    image_dir,
-                    str(err)
-                )
-            )
+        except FileNotFoundError:
+            raise ImageInvalidException(f'Invalid image {self.name}')
 
     def __exit__(self, type, value, traceback):
         os.chdir(self.__saved_dir)
@@ -157,19 +154,19 @@ class Image(Base):
 
     def get_asg_name(self):
         return Image.ASG_NAME_PARAM.format(
-            env=self.env.Name(),
+            env=self.env.get_name(),
             image=self.name
         )
 
     def get_latest_ami_built_param(self):
         return Image.LATEST_AMI_BUILT_PARAM.format(
-            env=self.env.Name(),
+            env=self.env.get_name(),
             image=self.name
         )
 
     def get_latest_ami_region_param(self):
         return Image.LATEST_AMI_REGION_PARAM.format(
-            env=self.env.Name(),
+            env=self.env.get_name(),
             image=self.name
         )
 
@@ -299,7 +296,7 @@ class Image(Base):
                 'type': 'amazon-ebs',
                 'ami_name': ami_name,
                 'ami_description': ami_description,
-                'region': self.env.config().get('aws_region'),
+                'region': self.env.get_config().get('aws_region'),
                 'instance_type': self.instance_type,
                 'source_ami': self.aws_ami['ImageId'],
                 'communicator': "ssh",
@@ -308,7 +305,7 @@ class Image(Base):
                     'base_ami_name': self.aws_ami['Name'],
                     'base_ami_id': self.aws_ami['ImageId'],
                     'build_date': '{{timestamp}}',
-                    'env': self.env.Name(),
+                    'env': self.env.get_name(),
                     'image': self.get_name(),
                     'thor': '0.1',
                 }

@@ -1,12 +1,21 @@
 import argparse
-from thor.lib.env import Env
+from thor.lib.env import (
+    Env,
+    EnvInvalidDirException,
+    EnvCreationException
+)
 
 
 def list_env_cmd(args):
     env = Env()
-    environments = env.list()
-    for env in environments:
-        print('{}'.format(env))
+
+    try:
+        environments = env.list()
+        for env in environments:
+            print('{}'.format(env))
+    except EnvInvalidDirException:
+        pass
+
 
 def create_env_cmd(args):
     print('Creating environment {}'.format(args.name))
@@ -14,12 +23,10 @@ def create_env_cmd(args):
     try:
         env = Env(args.name)
         env.create()
-        print('Success! Environment created under: {}'.format(Env.ROOT_FOLDER))
+        print('Success! Environment created under: {}'.format(Env.BASE_DIR))
         print('Make sure to commit your changes.')
-    except Exception as err:
-        print('Error: {}'.format(
-            str(err)
-        ))
+    except EnvCreationException as err:
+        print(f'Fail to create env {args.name} with error {err}')
 
 
 def main(args):
