@@ -1,10 +1,9 @@
 import os
 
-from thor.lib import thor
-
 from thor.lib.aws import Aws
 from thor.lib.base import Base
 from thor.lib.config import Config
+from thor.lib.thor import Thor
 
 
 class EnvException(Exception):
@@ -29,13 +28,12 @@ class EnvCreationException(Exception):
 
 class Env(Base):
 
-    BASE_DIR = f'{thor.ROOT_DIR}/environments'
     __AWS_CLIENT_CACHE = {}
 
     def __init__(self, name=None):
         super().__init__()
         self.name = name
-        self.env_dir = f'{Env.BASE_DIR}/{self.name}'
+        self.env_dir = f'{Thor.ENVIRONMENTS_DIR}/{self.name}'
         self.__env_list_cache = None
         self.__config = Config(f'{self.env_dir}/config.json')
         self.__saved_dir = None
@@ -67,10 +65,10 @@ class Env(Base):
 
     def list(self):
         try:
-            dirs = os.listdir(path=Env.BASE_DIR)
+            dirs = os.listdir(path=Thor.ENVIRONMENTS_DIR)
             return dirs
         except FileNotFoundError:
-            raise EnvInvalidDirException(Env.BASE_DIR)
+            raise EnvInvalidDirException(Thor.ENVIRONMENTS_DIR)
 
     def create(self):
         try:
