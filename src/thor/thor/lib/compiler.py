@@ -1,12 +1,12 @@
 import os
 import json
 
-from thor.lib import thor
 from jinja2 import (
     Template,
     TemplateSyntaxError
 )
 from thor.lib.base import Base
+from thor.lib.thor import Thor
 
 
 class CompilerArtifactGenerationException(Exception):
@@ -31,8 +31,8 @@ class Compiler(Base):
             'packer': self.build_target_packer,
             'templates': self.build_target_templates
         }
-        self.build_dir = '{project_dir}/build/{env_name}/{image_name}'.format(
-            project_dir=thor.ROOT_DIR,
+        self.build_dir = '{base_build_dir}/{env_name}/{image_name}'.format(
+            base_build_dir=Thor.BUILD_DIR,
             env_name=image.env.get_name(),
             image_name=image.get_name()
         )
@@ -196,41 +196,64 @@ class Compiler(Base):
         return count
 
     def build_target_templates(self):
-        source_files = self.image.get_template_files()
+        # Last in the list replaces top ones.
+        # This is ordered to resolves conflits, if any.
+        #
+        # 1. global templates
+        # 2. environment templates
+        # 3. image templates
+        sources = [
+            {
+                'base_dir': Thor.TEMPLATES_DIR,
+                'files': Thor.get_template_files()
+            },
+            {
+                'base_dir': self.image.env.get_template_dir(),
+                'files': self.image.env.get_template_files()
+            },
+            {
+                'base_dir': self.image.get_template_dir(),
+                'files': self.image.get_template_files()
+            }
+        ]
+
         dest_dir = f'{self.build_dir}/templates'
         count = 0
 
-        for entry in source_files:
-            base_dir, sub_dirs, files = entry
-            new_base_dir = base_dir[len(self.image.get_template_dir())+1:]
+        for source in sources:
+            source_base_dir = source['base_dir']
+            source_files = source['files']
+            for entry in source_files:
+                base_dir, sub_dirs, files = entry
+                new_base_dir = base_dir[len(source_base_dir)+1:]
 
-            if not new_base_dir:
-                new_base_dir = f'{dest_dir}'
-            else:
-                new_base_dir = f'{dest_dir}/{new_base_dir}'
+                if not new_base_dir:
+                    new_base_dir = f'{dest_dir}'
+                else:
+                    new_base_dir = f'{dest_dir}/{new_base_dir}'
 
-            if not os.path.exists(new_base_dir):
-                try:
-                    self.logger.info(f'Creating dir {new_base_dir}')
-                    os.makedirs(new_base_dir, exist_ok=True)
-                except OSError as err:
-                    self.abort_build(str(err))
+                if not os.path.exists(new_base_dir):
+                    try:
+                        self.logger.info(f'Creating dir {new_base_dir}')
+                        os.makedirs(new_base_dir, exist_ok=True)
+                    except OSError as err:
+                        self.abort_build(str(err))
 
-            for file_name in files:
-                template = f'{base_dir}/{file_name}'
+                for file_name in files:
+                    template = f'{base_dir}/{file_name}'
 
-                try:
-                    result = self.render_template(template)
-                except CompilerTemplateRenderingException as err:
-                    self.abort_build(str(err))
+                    try:
+                        result = self.render_template(template)
+                    except CompilerTemplateRenderingException as err:
+                        self.abort_build(str(err))
 
-                artifact_path = f'{new_base_dir}/{file_name}'
+                    artifact_path = f'{new_base_dir}/{file_name}'
 
-                try:
-                    self.new_artifact(artifact_path, result)
-                    count += 1
-                except CompilerArtifactGenerationException as err:
-                    self.abort_build(str(err))
+                    try:
+                        self.new_artifact(artifact_path, result)
+                        count += 1
+                    except CompilerArtifactGenerationException as err:
+                        self.abort_build(str(err))
         return count
 
     def build_target_packer(self):
