@@ -6,7 +6,6 @@ from thor.cmdline import (
     configure,
     deploy,
     env,
-    image,
     infra,
     param,
     setup
@@ -34,11 +33,6 @@ SUB_MODULES = {
         'help': 'Environment tools',
         'entry': env.main,
         'usage': 'thor env SUBCOMMAND'
-    },
-    'image': {
-        'help': 'Manager application images with Packer',
-        'entry': image.main,
-        'usage': 'thor image SUBCOMMAND'
     },
     'infra': {
         'help': 'Alias for terraform',
