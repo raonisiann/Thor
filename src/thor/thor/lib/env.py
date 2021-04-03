@@ -1,4 +1,7 @@
 import os
+
+from thor.lib import thor
+
 from thor.lib.aws import Aws
 from thor.lib.base import Base
 from thor.lib.config import Config
@@ -10,20 +13,15 @@ class EnvException(Exception):
 
 class Env(Base):
 
-    ROOT_FOLDER = '{}/environments'.format(os.getcwd())
-    CONFIG_FILE_PATH = '{env_dir}/config.json'
-
+    BASE_DIR = f'{thor.ROOT_DIR}/envirionments'
     __AWS_CLIENT_CACHE = {}
 
     def __init__(self, name=None):
         super().__init__()
         self.name = name
-        self.path = '{base}/{env}'.format(
-            base=Env.ROOT_FOLDER,
-            env=self.name
-        )
+        self.env_dir = f'{Env.BASE_DIR}/{self.name}'
         self.__env_list = []
-        self.__config = Config(Env.CONFIG_FILE_PATH.format(env_dir=self.path))
+        self.__config = Config(f'{self.env_dir}/config.json')
         self.__saved_dir = None
 
     def config(self):
@@ -33,7 +31,7 @@ class Env(Base):
         return self.name
 
     def Path(self):
-        return self.path
+        return self.env_dir
 
     def aws_client(self, service):
         region = self.config().get('aws_region')
@@ -69,9 +67,9 @@ class Env(Base):
             return self.__env_list
 
         try:
-            dirs = os.listdir(path=Env.ROOT_FOLDER)
+            dirs = os.listdir(path=Env.BASE_DIR)
         except FileNotFoundError:
-            print('Invalid environment dir "{}"'.format(Env.ROOT_FOLDER))
+            print('Invalid environment dir "{}"'.format(Env.BASE_DIR))
             exit(-1)
 
         for name in dirs:
@@ -81,15 +79,15 @@ class Env(Base):
     def create(self):
         try:
             env_read_me_file = '{env_path}/README.txt'.format(
-                env_path=self.path
+                env_path=self.env_dir
             )
 
-            if os.path.exists(self.path):
+            if os.path.exists(self.env_dir):
                 raise Exception('Environment {} already exists.'.format(
                     self.name
                 ))
 
-            os.mkdir(path=self.path)
+            os.mkdir(path=self.env_dir)
 
             with open(env_read_me_file, mode='+x') as f:
                 f.write('Environment {}'.format(self.name))
@@ -101,16 +99,22 @@ class Env(Base):
         return self.name
 
     def get_env_path(self):
-        return self.path
+        return self.env_dir
 
     def get_env_dir(self):
-        return self.path
+        return self.env_dir
 
     def get_variables_file(self):
-        return '{env_dir}/variables.json'.format(
-            env_dir=self.get_env_dir()
-        )
+        return f'{self.env_dir}/variables.json'
 
+    def get_template_dir(self):
+        return f'{self.env_dir}/templates'
+
+    def get_template_files(self):
+        if os.path.isdir(self.get_template_dir()):
+            return list(os.walk(self.get_template_dir()))
+        else:
+            return []
 
     def __enter__(self):
         self.__saved_dir = os.getcwd()
