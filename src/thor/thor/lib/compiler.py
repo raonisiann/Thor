@@ -1,6 +1,7 @@
 import os
 import json
 
+from datetime import datetime
 from jinja2 import (
     Template,
     TemplateSyntaxError
@@ -37,6 +38,8 @@ class Compiler(Base):
             image_name=image.get_name()
         )
         self.build_info_file = f'{self.build_dir}/build_info.json'
+        self.start_time = ''
+        self.end_time = ''
         self.artifacts = []
         self.variables = None
         self.__saved_dir = None
@@ -112,20 +115,28 @@ class Compiler(Base):
 
     def get_artifact_variables(self):
         return {
-            'artifacts': self.get_artifacts()
+            'files': self.get_artifacts()
+        }
+
+    def generate_template_variables(self):
+        return {
+            'artifacts': self.get_artifacts(),
+            'thor': self.get_thor_variables(),
+            'var': self.get_variables()
         }
 
     def generate_build_info_file(self):
         self.logger.info('Generating build info file..')
+        build_info = {
+            'start_time': str(self.start_time),
+            'end_time': str(self.end_time),
+            'variables': self.generate_template_variables()
+        }
         with open(self.build_info_file, 'w') as f:
-            json.dump(self.get_thor_variables(), f, indent=4)
+            json.dump(build_info, f, indent=4)
         self.logger.info(f'Build info file => {self.build_info_file}')
 
     def render_template(self, template_path):
-        artifact_variables = self.get_artifact_variables()
-        variables = self.get_variables()
-        thor_variables = self.get_thor_variables()
-
         try:
             self.logger.info(f'Loading template {template_path}')
             with open(template_path) as f:
@@ -133,10 +144,7 @@ class Compiler(Base):
                 try:
                     self.logger.info('Rendering...')
                     rendered = template.render(
-                        artifact=artifact_variables,
-                        thor=thor_variables,
-                        var=variables,
-                    )
+                        **self.generate_template_variables())
                     self.logger.info('Rendering Done!')
                     return rendered
                 except TemplateSyntaxError as err:
@@ -282,11 +290,13 @@ class Compiler(Base):
         return count
 
     def build_all(self):
+        self.start_time = datetime.now()
         for name, target in self.build_targets.items():
             self.logger.info(f'Building target => {name}...')
             result = target()
             self.logger.info('Build completed')
             self.logger.info(f'Target => {name}, Artifacts => {result}')
+        self.end_time = datetime.now()
         self.generate_build_info_file()
 
     def __remove_dirs_recursive(self, path):
