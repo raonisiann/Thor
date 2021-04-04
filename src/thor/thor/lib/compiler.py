@@ -36,6 +36,7 @@ class Compiler(Base):
             env_name=image.env.get_name(),
             image_name=image.get_name()
         )
+        self.build_info_file = f'{self.build_dir}/build_info.json'
         self.artifacts = []
         self.variables = None
         self.__saved_dir = None
@@ -80,6 +81,9 @@ class Compiler(Base):
     def get_build_dir(self):
         return self.build_dir
 
+    def get_build_info_file(self):
+        return self.build_info_file
+
     def get_variables(self):
         if self.variables is None:
             env_vars = self.load_json_file(self.image.env.get_variables_file())
@@ -110,6 +114,12 @@ class Compiler(Base):
         return {
             'artifacts': self.get_artifacts()
         }
+
+    def generate_build_info_file(self):
+        self.logger.info('Generating build info file..')
+        with open(self.build_info_file, 'w') as f:
+            json.dump(self.get_thor_variables(), f, indent=4)
+        self.logger.info(f'Build info file => {self.build_info_file}')
 
     def render_template(self, template_path):
         artifact_variables = self.get_artifact_variables()
@@ -277,6 +287,7 @@ class Compiler(Base):
             result = target()
             self.logger.info('Build completed')
             self.logger.info(f'Target => {name}, Artifacts => {result}')
+        self.generate_build_info_file()
 
     def __remove_dirs_recursive(self, path):
         if os.path.exists(path):
