@@ -2,7 +2,10 @@ import os
 
 from thor.lib.aws import Aws
 from thor.lib.base import Base
-from thor.lib.config import Config
+from thor.lib.config import (
+    Config,
+    ConfigUnknownKeyException
+)
 from thor.lib.thor import Thor
 
 
@@ -39,7 +42,12 @@ class Env(Base):
         self.__saved_dir = None
 
     def aws_client(self, service):
-        region = self.get_config().get('aws_region')
+        try:
+            region = self.get_config().get('aws_region')
+        except ConfigUnknownKeyException:
+            error = 'aws_region not found in config.json. Exiting...'
+            self.logger.error(error)
+            exit(-1)
         profile = self.get_name()
         key = '{}.{}'.format(region, service)
 
