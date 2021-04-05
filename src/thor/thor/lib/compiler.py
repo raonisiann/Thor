@@ -3,6 +3,8 @@ import json
 
 from datetime import datetime
 from jinja2 import (
+    Environment,
+    FileSystemLoader,
     Template,
     TemplateSyntaxError
 )
@@ -220,59 +222,14 @@ class Compiler(Base):
         # 1. global templates
         # 2. environment templates
         # 3. image templates
-        sources = [
-            {
-                'base_dir': Thor.TEMPLATES_DIR,
-                'files': Thor.get_template_files()
-            },
-            {
-                'base_dir': self.image.env.get_template_dir(),
-                'files': self.image.env.get_template_files()
-            },
-            {
-                'base_dir': self.image.get_template_dir(),
-                'files': self.image.get_template_files()
-            }
+        template_list = [
+            self.image.get_template_dir(),
+            self.image.env.get_template_dir(),
+            Thor.TEMPLATES_DIR,
         ]
-
         dest_dir = f'{self.build_dir}/templates'
-        count = 0
-
-        for source in sources:
-            source_base_dir = source['base_dir']
-            source_files = source['files']
-            for entry in source_files:
-                base_dir, sub_dirs, files = entry
-                new_base_dir = base_dir[len(source_base_dir)+1:]
-
-                if not new_base_dir:
-                    new_base_dir = f'{dest_dir}'
-                else:
-                    new_base_dir = f'{dest_dir}/{new_base_dir}'
-
-                if not os.path.exists(new_base_dir):
-                    try:
-                        self.logger.info(f'Creating dir {new_base_dir}')
-                        os.makedirs(new_base_dir, exist_ok=True)
-                    except OSError as err:
-                        self.abort_build(str(err))
-
-                for file_name in files:
-                    template = f'{base_dir}/{file_name}'
-
-                    try:
-                        result = self.render_template(template)
-                    except CompilerTemplateRenderingException as err:
-                        self.abort_build(str(err))
-
-                    artifact_path = f'{new_base_dir}/{file_name}'
-
-                    try:
-                        self.new_artifact(artifact_path, result)
-                        count += 1
-                    except CompilerArtifactGenerationException as err:
-                        self.abort_build(str(err))
-        return count
+        template = CompilerTemplate(template_list, dest_dir)
+        return template.render_all(self.generate_template_variables())
 
     def build_target_packer(self):
         count = 0
@@ -327,3 +284,38 @@ class Compiler(Base):
         self.build_all()
         self.logger.info(f'Build dir ==> {self.build_dir}')
         self.logger.info('Build completed with success!')
+
+
+class CompilerTemplate(Base):
+
+    def __init__(self, templates_dir, dst_dir):
+        super().__init__()
+        self.dst_dir = dst_dir
+        self.jinja_env = Environment(loader=FileSystemLoader(templates_dir))
+
+    def render(self, template, variables):
+        self.logger.info(f'Rendering {template}')
+        stream = self.jinja_env.get_template(template).stream(variables)
+        template_dst_path = f'{self.dst_dir}/{template}'
+        template_dst_dir = os.path.dirname(template_dst_path)
+
+        try:
+            os.makedirs(template_dst_dir, exist_ok=True)
+            # remove template extension if exists
+            if '.tmpl' == template_dst_path[-5:]:
+                template_dst_path = template_dst_path[:-5]
+            stream.dump(template_dst_path)
+            self.logger.info('Rendering completed')
+        except TemplateSyntaxError as err:
+            self.logger.error(f'Fail to render template {template}')
+            self.logger.debug(str(err))
+            raise CompilerTemplateRenderingException(str(err))
+        except OSError as err:
+            self.logger.debug(str(err))
+
+    def render_all(self, variables):
+        count = 0
+        for template in self.jinja_env.list_templates():
+            self.render(template, variables)
+            count += 1
+        return count
