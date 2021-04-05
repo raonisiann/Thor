@@ -6,7 +6,8 @@ from jinja2 import (
     Environment,
     FileSystemLoader,
     Template,
-    TemplateSyntaxError
+    TemplateSyntaxError,
+    UndefinedError
 )
 from thor.lib.base import Base
 from thor.lib.thor import Thor
@@ -233,7 +234,10 @@ class Compiler(Base):
         ]
         dest_dir = f'{self.build_dir}/templates'
         template = CompilerTemplate(self.image, template_list, dest_dir)
-        return template.render_all(self.generate_template_variables())
+        try:
+            return template.render_all(self.generate_template_variables())
+        except CompilerTemplateRenderingException as err:
+            self.abort_build(str(err))
 
     def build_target_packer(self):
         count = 0
@@ -309,8 +313,7 @@ class CompilerTemplate(Base):
             return param.get(param_full_name)
         except ParameterStoreNotFoundException:
             error_msg = f'Parameter {param_full_name} not found'
-            self.logger.error(error_msg)
-            CompilerTemplateRenderingException(error_msg)
+            raise UndefinedError(error_msg)
 
     def render(self, template, variables):
         self.logger.info(f'Rendering {template}')
@@ -326,11 +329,11 @@ class CompilerTemplate(Base):
             stream.dump(template_dst_path)
             self.logger.info('Rendering completed')
         except TemplateSyntaxError as err:
-            self.logger.error(f'Fail to render template {template}')
-            self.logger.debug(str(err))
+            raise CompilerTemplateRenderingException(str(err))
+        except UndefinedError as err:
             raise CompilerTemplateRenderingException(str(err))
         except OSError as err:
-            self.logger.debug(str(err))
+            raise CompilerTemplateRenderingException(str(err))
 
     def render_all(self, variables):
         count = 0
