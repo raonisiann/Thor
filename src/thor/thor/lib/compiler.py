@@ -72,6 +72,7 @@ class Compiler(Base):
         self.__create_build_dirs()
         self.__saved_dir = os.getcwd()
         self.__cd(self.build_dir)
+        return self
 
     def __exit__(self, type, value, traceback):
         self.__cd(self.__saved_dir)
