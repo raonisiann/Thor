@@ -10,6 +10,10 @@ from jinja2 import (
 )
 from thor.lib.base import Base
 from thor.lib.thor import Thor
+from thor.lib.aws_resources.parameter_store import (
+    ParameterStore,
+    ParameterStoreNotFoundException
+)
 
 
 class CompilerArtifactGenerationException(Exception):
@@ -228,7 +232,7 @@ class Compiler(Base):
             Thor.TEMPLATES_DIR,
         ]
         dest_dir = f'{self.build_dir}/templates'
-        template = CompilerTemplate(template_list, dest_dir)
+        template = CompilerTemplate(self.image, template_list, dest_dir)
         return template.render_all(self.generate_template_variables())
 
     def build_target_packer(self):
@@ -288,10 +292,25 @@ class Compiler(Base):
 
 class CompilerTemplate(Base):
 
-    def __init__(self, templates_dir, dst_dir):
+    def __init__(self, image, templates_dir, dst_dir):
         super().__init__()
+        self.image = image
         self.dst_dir = dst_dir
         self.jinja_env = Environment(loader=FileSystemLoader(templates_dir))
+        self.jinja_env.filters['getparam'] = self.filter_get_param
+
+    def filter_get_param(self, name):
+        env_name = self.image.env.get_name()
+        image_name = self.image.get_name()
+        param_full_name = f'/thor/{env_name}/{image_name}/{name}'
+        param = ParameterStore(self.image.env)
+
+        try:
+            return param.get(param_full_name)
+        except ParameterStoreNotFoundException:
+            error_msg = f'Parameter {param_full_name} not found'
+            self.logger.error(error_msg)
+            CompilerTemplateRenderingException(error_msg)
 
     def render(self, template, variables):
         self.logger.info(f'Rendering {template}')
