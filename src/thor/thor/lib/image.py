@@ -233,14 +233,16 @@ class Image(Base):
         return latest_build['artifact_id']
 
     def get_manifest_file_content(self):
-        manifest_file = f'{self.image_dir}/manifest.json'
-        manifest_content = ""
+        manifest_file = 'manifest.json'
+        manifest_content = ''
 
         if os.path.exists(manifest_file):
-            with open(manifest_file) as manifest:
+            with open(manifest_file, 'r') as manifest:
                 manifest_content = manifest.read()
-
-        return json.loads(manifest_content)
+            return json.loads(manifest_content)
+        else:
+            self.logger.warning('No manifest file found')
+            return ''
 
     def rotate_ami_id_list(self, ami_id, ami_id_list):
         '''
