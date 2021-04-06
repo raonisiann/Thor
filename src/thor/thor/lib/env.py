@@ -31,6 +31,9 @@ class EnvCreationException(Exception):
 
 class Env(Base):
 
+    CONFIG_FILE = 'config.json'
+    VARIABLES_FILE = 'variables.json'
+
     __AWS_CLIENT_CACHE = {}
 
     def __init__(self, name=None):
@@ -101,7 +104,10 @@ class Env(Base):
         return self.env_dir
 
     def get_variables_file(self):
-        return f'{self.env_dir}/variables.json'
+        return f'{self.env_dir}/{Env.VARIABLES_FILE}'
+
+    def get_config_file(self):
+        return f'{self.env_dir}/{Env.CONFIG_FILE}'
 
     def get_template_dir(self):
         return f'{self.env_dir}/templates'

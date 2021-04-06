@@ -38,7 +38,8 @@ class Compiler(Base):
         self.build_targets = {
             'static': self.build_target_static,
             'packer': self.build_target_packer,
-            'templates': self.build_target_templates
+            'templates': self.build_target_templates,
+            'config': self.build_target_config
         }
         self.build_dir = '{base_build_dir}/{env_name}/{image_name}'.format(
             base_build_dir=Thor.BUILD_DIR,
@@ -257,6 +258,37 @@ class Compiler(Base):
                 self.abort_build(str(err))
 
         return count
+
+    def build_target_config(self):
+        count = 0
+        env_config = {}
+        image_config = {}
+
+        if os.path.exists(self.image.env.get_config_file()):
+            with open(self.image.env.get_config_file(), 'r') as f:
+                env_config = json.loads(f.read())
+
+        if os.path.exists(self.image.get_config_file()):
+            with open(self.image.get_config_file(), 'r') as f:
+                image_config = json.loads(f.read())
+        # image settings override environment settings
+        merged_config = json.dumps({**env_config, **image_config}, indent=4)
+
+        try:
+            self.logger.info('Loading merged config')
+            template = Template(merged_config)
+            try:
+                self.logger.info('Rendering...')
+                rendered = template.render(
+                    **self.generate_template_variables())
+                self.logger.info('Rendering Done!')
+                self.new_artifact(f'{self.build_dir}/config.json', rendered)
+                count += 1
+                return count
+            except TemplateSyntaxError as err:
+                CompilerTemplateRenderingException(str(err))
+        except OSError as err:
+            CompilerTemplateRenderingException(str(err))
 
     def build_all(self):
         self.start_time = datetime.now()

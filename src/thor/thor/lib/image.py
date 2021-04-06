@@ -93,6 +93,8 @@ class Image(Base):
     BUILD_FAIL_CODE = -1
 
     PACKER_FILE = 'packer.json'
+    PACKER_MANIFEST_FILE = 'manifest.json'
+    CONFIG_FILE = 'config.json'
     # parameters
     ASG_NAME_PARAM = '/{env}/{image}/deploy/asg_name'
     LATEST_AMI_BUILT_PARAM = '/{env}/{image}/build/latest/ami_id'
@@ -112,7 +114,7 @@ class Image(Base):
         self.image_files_list = None
         self.instance_type = instance_type
         self.params = ImageParams(self)
-        self.config = Config(f'{self.image_dir}/config.json')
+        self.config = Config(Image.CONFIG_FILE)
         self.__saved_dir = None
 
     def __enter__(self):
@@ -129,7 +131,7 @@ class Image(Base):
         self.clean_image_manifest_file()
 
     def clean_image_manifest_file(self):
-        manifest_file_path = f'{self.image_dir}/manifest.json'
+        manifest_file_path = Image.PACKER_MANIFEST_FILE
         if os.path.exists(manifest_file_path):
             try:
                 self.logger.info('Removing manifest file...')
@@ -180,11 +182,10 @@ class Image(Base):
         return f'{self.image_dir}/variables.json'
 
     def get_packer_file(self):
-        packer_file = f'{self.image_dir}/packer.json'
-        if os.path.exists(packer_file):
-            return packer_file
-        else:
-            return ''
+        return f'{self.image_dir}/{Image.PACKER_FILE}'
+
+    def get_config_file(self):
+        return f'{self.image_dir}/{Image.CONFIG_FILE}'
 
     def get_template_files(self):
         if os.path.isdir(self.template_dir):
@@ -233,7 +234,7 @@ class Image(Base):
         return latest_build['artifact_id']
 
     def get_manifest_file_content(self):
-        manifest_file = 'manifest.json'
+        manifest_file = Image.PACKER_MANIFEST_FILE
         manifest_content = ''
 
         if os.path.exists(manifest_file):
