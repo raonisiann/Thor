@@ -1,6 +1,7 @@
 import argparse
 import logging
 from thor.lib.deploy import DeployBlueGreen
+from thor.lib.compiler import Compiler
 from thor.lib.env import Env
 from thor.lib.image import Image
 
@@ -10,8 +11,9 @@ def deploy_cmd(args):
     logger.info('Starting...')
     image = Image(env=args.env, name=args.image)
 
-    deploy = DeployBlueGreen(image)
-    result = deploy.run()
+    with Compiler(image):
+        deploy = DeployBlueGreen(image)
+        result = deploy.run()
 
     if result == 'success':
         logger.info('Completed with no errors :)')

@@ -4,9 +4,9 @@ from thor.__version__ import __version__
 from thor.cmdline import (
     build,
     configure,
+    compiler,
     deploy,
     env,
-    image,
     infra,
     param,
     setup
@@ -25,6 +25,11 @@ SUB_MODULES = {
         'entry': configure.main,
         'usage': 'thor configure SUBCOMMAND'
     },
+    'compiler': {
+        'help': 'Thor compiler',
+        'entry': compiler.main,
+        'usage': 'thor compiler ARGS'
+    },
     'deploy': {
         'help': 'Thor deploys',
         'entry': deploy.main,
@@ -34,11 +39,6 @@ SUB_MODULES = {
         'help': 'Environment tools',
         'entry': env.main,
         'usage': 'thor env SUBCOMMAND'
-    },
-    'image': {
-        'help': 'Manager application images with Packer',
-        'entry': image.main,
-        'usage': 'thor image SUBCOMMAND'
     },
     'infra': {
         'help': 'Alias for terraform',
