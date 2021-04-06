@@ -14,12 +14,10 @@ def build_cmd(args):
     logger = logging.getLogger('BuildCmd')
     logger.info('Building... ')
     packer = Packer()
+    image = Image(args.env, args.image, None)
 
     try:
-        with Image(args.env, args.image, None) as image:
-            logger.info('Changing directory to {}'.format(image.get_image_dir()))
-            # compiler
-            compiler = Compiler(image)
+        with Compiler(image) as compiler:
             compiler.build()
             if args.no_image_build:
                 logger.info('No image build arg has been provided. Exiting...')
