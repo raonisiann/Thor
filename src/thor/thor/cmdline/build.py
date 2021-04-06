@@ -17,11 +17,7 @@ def build_cmd(args):
     image = Image(args.env, args.image, None)
 
     try:
-        with Compiler(image) as compiler:
-            compiler.build()
-            if args.no_image_build:
-                logger.info('No image build arg has been provided. Exiting...')
-                exit(0)
+        with Compiler(image):
             # run packer build
             result = packer.run('build', Image.PACKER_FILE)
             logger.info('Return code is {}'.format(result))
@@ -85,11 +81,6 @@ def main(args):
     )
     build_arg_parser.add_argument(
         '--update-latest-ami',
-        action='store_true',
-        required=False
-    )
-    build_arg_parser.add_argument(
-        '--no-image-build',
         action='store_true',
         required=False
     )
