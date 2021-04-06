@@ -10,13 +10,25 @@ def compiler_cmd(args):
     logger.info('Starting...')
     image = Image(env=args.env, name=args.image)
 
-    print(args.target)
-
     compiler = Compiler(image)
-    result = compiler.build_all()
+
+    if args.target is not None:
+        if args.target in compiler.build_targets:
+            build_target_func = compiler.build_targets[args.target]
+            result = build_target_func()
+        else:
+            build_targets = [x for x in compiler.build_targets.keys()]
+            logger.error(f'Compiler target must be one of: {build_targets}')
+            result = 'fail'
+    else:
+        result = compiler.build_all()
 
     if result == 'success':
         logger.info('Completed with no errors :) ')
+    elif result == 'fail':
+        logger.info('Build fail :(')
+    else:
+        logger.error('Build not returned any expected result. :(')
 
 
 def main(args):
