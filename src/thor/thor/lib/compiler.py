@@ -156,40 +156,6 @@ class Compiler(Base):
             json.dump(build_info, f, indent=4)
         self.logger.info(f'Build info file => {self.build_info_file}')
 
-    def render_template(self, template_path):
-        try:
-            self.logger.info(f'Loading template {template_path}')
-            with open(template_path) as f:
-                template = Template(f.read())
-                try:
-                    self.logger.info('Rendering...')
-                    rendered = template.render(
-                        **self.generate_template_variables())
-                    self.logger.info('Rendering Done!')
-                    return rendered
-                except TemplateSyntaxError as err:
-                    CompilerTemplateRenderingException(str(err))
-        except OSError as err:
-            CompilerTemplateRenderingException(str(err))
-
-    def new_artifact(self, path, content):
-        try:
-            # remove template extesion if existing
-            if '.tmpl' == path[-5:]:
-                artifact_file = path[:-5]
-            else:
-                artifact_file = path
-            artifact_relative_name = artifact_file[len(self.build_dir)+1:]
-            self.logger.info(f'Creating artifact => {artifact_relative_name}')
-
-            with open(artifact_file, 'w') as artifact:
-                artifact.write(content)
-                self.artifacts.append(artifact_relative_name)
-                self.logger.info('Artifact generated')
-        except OSError as err:
-            self.logger.error('Fail to generated artifact {path}')
-            raise CompilerArtifactGenerationException(str(err))
-
     def abort_build(self, reason):
         self.logger.error(reason)
         self.logger.info('Aborting...')
@@ -255,7 +221,7 @@ class Compiler(Base):
             Thor.TEMPLATES_DIR,
         ]
         dest_dir = f'{self.build_dir}/templates'
-        template = CompilerTemplate(self.image, template_list, dest_dir)
+        template = CompilerTemplateDir(self.image, dest_dir, template_list)
         try:
             count = template.render_all(self.generate_template_variables())
             self.logger.info('Build completed')
@@ -269,10 +235,13 @@ class Compiler(Base):
         self.__create_build_dirs()
         packer_file = self.image.get_packer_file()
         if packer_file:
+            with open(packer_file, 'r') as f:
+                packer_file_content = f.read()
             try:
-                dst_packer_file = f'{self.build_dir}/packer.json'
-                result = self.render_template(packer_file)
-                self.new_artifact(dst_packer_file, result)
+                template = CompilerTemplateString(self.image, self.build_dir,
+                                                  packer_file_content)
+                template.render('packer.json',
+                                self.generate_template_variables())
                 self.logger.info('Build completed')
                 self.logger.info('Target => packer, Artifacts => 1')
             except CompilerArtifactGenerationException as err:
@@ -300,13 +269,13 @@ class Compiler(Base):
 
         try:
             self.logger.info('Loading merged config')
-            template = Template(merged_config)
             try:
                 self.logger.info('Rendering...')
-                rendered = template.render(
-                    **self.generate_template_variables())
+                template = CompilerTemplateString(self.image, self.build_dir,
+                                                  merged_config)
+                template.render('config.json',
+                                self.generate_template_variables())
                 self.logger.info('Rendering Done!')
-                self.new_artifact(f'{self.build_dir}/config.json', rendered)
                 self.logger.info('Build completed')
                 self.logger.info('Target => config, Artifacts => 1')
                 return 'success'
@@ -361,11 +330,11 @@ class Compiler(Base):
 
 class CompilerTemplate(Base):
 
-    def __init__(self, image, templates_dir, dst_dir):
+    def __init__(self, image, dst_dir, jinja_env):
         super().__init__()
         self.image = image
         self.dst_dir = dst_dir
-        self.jinja_env = Environment(loader=FileSystemLoader(templates_dir))
+        self.jinja_env = jinja_env
         self.jinja_env.filters['getparam'] = self.filter_get_param
 
     def filter_get_param(self, name):
@@ -379,6 +348,43 @@ class CompilerTemplate(Base):
         except ParameterStoreNotFoundException:
             error_msg = f'Parameter {param_full_name} not found'
             raise UndefinedError(error_msg)
+
+
+class CompilerTemplateString(CompilerTemplate):
+
+    def __init__(self, image, dst_dir, template_string):
+        super().__init__(image, dst_dir, Environment())
+        self.template_string = template_string
+
+    def render(self, dst_file, variables):
+        self.logger.info(f'Rendering {dst_file}')
+        rendered = self.jinja_env.from_string(self.template_string)
+        stream = rendered.stream(variables)
+        template_dst_path = f'{self.dst_dir}/{dst_file}'
+        template_dst_dir = os.path.dirname(template_dst_path)
+
+        try:
+            os.makedirs(template_dst_dir, exist_ok=True)
+            # remove template extension if exists
+            if '.tmpl' == template_dst_path[-5:]:
+                template_dst_path = template_dst_path[:-5]
+            stream.dump(template_dst_path)
+            self.logger.info('Rendering completed')
+        except TemplateSyntaxError as err:
+            raise CompilerTemplateRenderingException(str(err))
+        except UndefinedError as err:
+            raise CompilerTemplateRenderingException(str(err))
+        except OSError as err:
+            raise CompilerTemplateRenderingException(str(err))
+
+
+class CompilerTemplateDir(CompilerTemplate):
+
+    def __init__(self, image, dst_dir, templates_dir):
+        super().__init__(
+            image,
+            dst_dir,
+            Environment(loader=FileSystemLoader(templates_dir)))
 
     def render(self, template, variables):
         self.logger.info(f'Rendering {template}')
