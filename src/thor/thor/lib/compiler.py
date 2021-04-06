@@ -11,6 +11,7 @@ from jinja2 import (
 )
 from thor.lib.base import Base
 from thor.lib.thor import Thor
+from thor.lib.utils.names_generator import random_string
 from thor.lib.aws_resources.parameter_store import (
     ParameterStore,
     ParameterStoreNotFoundException
@@ -48,6 +49,7 @@ class Compiler(Base):
         self.start_time = ''
         self.end_time = ''
         self.artifacts = []
+        self.random_string = random_string()
         self.variables = None
         self.__saved_dir = None
 
@@ -118,7 +120,8 @@ class Compiler(Base):
         return {
             'env': self.image.env.get_name(),
             'image': self.image.get_name(),
-            'build_dir': self.get_build_dir()
+            'build_dir': self.get_build_dir(),
+            'random_string': self.random_string
         }
 
     def get_artifact_variables(self):
