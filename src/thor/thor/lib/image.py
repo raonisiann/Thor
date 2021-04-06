@@ -195,7 +195,7 @@ class Image(Base):
 
     def get_static_files(self):
         if os.path.isdir(self.static_dir):
-            tree = os.walk(self.static_dir)
+            tree = list(os.walk(self.static_dir))
             return tree
         else:
             return []
