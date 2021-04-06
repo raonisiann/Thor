@@ -36,13 +36,13 @@ class Compiler(Base):
     def __init__(self, image):
         super().__init__()
         self.image = image
-        self.build_targets = {
-            'static': self.build_target_static,
-            'packer': self.build_target_packer,
-            'templates': self.build_target_templates,
-            'config': self.build_target_config,
-            'clean': self.clean_build_dir
-        }
+        self.build_targets = [
+            {'name': 'clean', 'func': self.build_target_clean},
+            {'name': 'static', 'func': self.build_target_static},
+            {'name': 'templates', 'func': self.build_target_templates},
+            {'name': 'packer', 'func': self.build_target_packer},
+            {'name': 'config', 'func': self.build_target_config}
+        ]
         self.build_dir = '{base_build_dir}/{env_name}/{image_name}'.format(
             base_build_dir=Thor.BUILD_DIR,
             env_name=image.env.get_name(),
@@ -57,16 +57,19 @@ class Compiler(Base):
         self.artifacts = []
         self.random_string = random_string()
         self.variables = None
+        self.is_build_dir_created = False
         self.__saved_dir = None
 
     def __create_build_dirs(self):
-        if not os.path.exists(self.build_dir):
-            self.logger.info(f'Creating dir {self.build_dir}')
-            try:
-                os.makedirs(self.build_dir)
-            except OSError as err:
-                self.logger.error(f'Fail to create dir {self.build_dir}')
-                raise CompilerException(str(err))
+        if not self.is_build_dir_created:
+            if not os.path.exists(self.build_dir):
+                self.logger.info(f'Creating dir {self.build_dir}')
+                try:
+                    os.makedirs(self.build_dir)
+                    self.is_build_dir_created = True
+                except OSError as err:
+                    self.logger.error(f'Fail to create dir {self.build_dir}')
+                    raise CompilerException(str(err))
 
     def __cd(self, path):
         try:
@@ -194,6 +197,7 @@ class Compiler(Base):
 
     def build_target_static(self):
         self.logger.info('Building target => static...')
+        self.__create_build_dirs()
         static_files = self.image.get_static_files()
         dest_dir = f'{self.build_dir}/static'
         count = 0
@@ -238,6 +242,7 @@ class Compiler(Base):
 
     def build_target_templates(self):
         self.logger.info('Building target => templates...')
+        self.__create_build_dirs()
         # Last in the list replaces top ones.
         # This is ordered to resolves conflits, if any.
         #
@@ -261,6 +266,7 @@ class Compiler(Base):
 
     def build_target_packer(self):
         self.logger.info('Building target => packer...')
+        self.__create_build_dirs()
         packer_file = self.image.get_packer_file()
         if packer_file:
             try:
@@ -278,6 +284,7 @@ class Compiler(Base):
 
     def build_target_config(self):
         self.logger.info('Building target => config...')
+        self.__create_build_dirs()
         env_config = {}
         image_config = {}
 
@@ -310,7 +317,8 @@ class Compiler(Base):
 
     def build_all(self):
         self.start_time = datetime.now()
-        for name, target in self.build_targets.items():
+        for target_item in self.build_targets:
+            target = target_item['func']
             result = target()
             if not result == 'success':
                 # force the proccess to terminate if we not get
@@ -342,10 +350,9 @@ class Compiler(Base):
         self.logger.info(f'Cleaning {self.build_dir}')
         self.__remove_dirs_recursive(self.build_dir)
         self.logger.info('Clean done!')
+        return 'success'
 
     def build(self):
-        self.build_target_clean()
-        self.__create_build_dirs()
         self.build_all()
         self.logger.info(f'Build dir ==> {self.build_dir}')
         self.logger.info('Build completed with success!')

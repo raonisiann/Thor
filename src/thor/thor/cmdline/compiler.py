@@ -13,12 +13,17 @@ def compiler_cmd(args):
     compiler = Compiler(image)
 
     if args.target is not None:
-        if args.target in compiler.build_targets:
-            build_target_func = compiler.build_targets[args.target]
+        build_targets_names = [
+            x['name'] for x in compiler.build_targets]
+        if args.target in build_targets_names:
+            for target in compiler.build_targets:
+                if target['name'] == args.target:
+                    build_target_func = target['func']
+                    break
             result = build_target_func()
         else:
-            build_targets = [x for x in compiler.build_targets.keys()]
-            logger.error(f'Compiler target must be one of: {build_targets}')
+            build_target_str = ', '.join(build_targets_names)
+            logger.error(f'Compiler target must be either {build_target_str}')
             result = 'fail'
     else:
         result = compiler.build_all()
