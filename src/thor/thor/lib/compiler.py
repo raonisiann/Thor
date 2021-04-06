@@ -10,6 +10,7 @@ from jinja2 import (
     UndefinedError
 )
 from thor.lib.base import Base
+from thor.lib.config import Config
 from thor.lib.thor import Thor
 from thor.lib.utils.names_generator import random_string
 from thor.lib.aws_resources.parameter_store import (
@@ -46,6 +47,9 @@ class Compiler(Base):
             env_name=image.env.get_name(),
             image_name=image.get_name()
         )
+        # compiler overrides default config file localtion
+        # to use the one after build process.
+        self.image.config = Config(f'{self.build_dir}/config.json')
         self.build_info_file = f'{self.build_dir}/build_info.json'
         self.start_time = ''
         self.end_time = ''
