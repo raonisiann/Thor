@@ -4,6 +4,7 @@ from thor.__version__ import __version__
 from thor.cmdline import (
     build,
     configure,
+    compiler,
     deploy,
     env,
     infra,
@@ -23,6 +24,11 @@ SUB_MODULES = {
         'help': 'Thor configuration',
         'entry': configure.main,
         'usage': 'thor configure SUBCOMMAND'
+    },
+    'compiler': {
+        'help': 'Thor compiler',
+        'entry': compiler.main,
+        'usage': 'thor compiler ARGS'
     },
     'deploy': {
         'help': 'Thor deploys',

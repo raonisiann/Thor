@@ -332,6 +332,7 @@ class Compiler(Base):
         self.build_all()
         self.logger.info(f'Build dir ==> {self.build_dir}')
         self.logger.info('Build completed with success!')
+        return 'success'
 
 
 class CompilerTemplate(Base):
