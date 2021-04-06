@@ -192,9 +192,13 @@ class Compiler(Base):
         exit(-1)
 
     def build_target_static(self):
+        self.logger.info('Building target => static...')
         static_files = self.image.get_static_files()
         dest_dir = f'{self.build_dir}/static'
         count = 0
+
+        if len(static_files) == 0:
+            self.logger.info('No static files to build')
 
         for entry in static_files:
             base_dir, sub_dirs, files = entry
@@ -224,12 +228,15 @@ class Compiler(Base):
                             dst.write(content)
                     self.logger.info('File copy completed with success')
                     count += 1
+                    self.logger.info('Build completed')
+                    self.logger.info(f'Target => static, Artifacts => {count}')
                 except OSError as err:
                     self.logger.error('Fail to copy static file')
                     self.abort_build(str(err))
-        return count
+        return 'success'
 
     def build_target_templates(self):
+        self.logger.info('Building target => templates...')
         # Last in the list replaces top ones.
         # This is ordered to resolves conflits, if any.
         #
@@ -244,27 +251,32 @@ class Compiler(Base):
         dest_dir = f'{self.build_dir}/templates'
         template = CompilerTemplate(self.image, template_list, dest_dir)
         try:
-            return template.render_all(self.generate_template_variables())
+            count = template.render_all(self.generate_template_variables())
+            self.logger.info('Build completed')
+            self.logger.info(f'Target => templates, Artifacts => {count}')
+            return 'success'
         except CompilerTemplateRenderingException as err:
             self.abort_build(str(err))
 
     def build_target_packer(self):
-        count = 0
+        self.logger.info('Building target => packer...')
         packer_file = self.image.get_packer_file()
         if packer_file:
-
             try:
                 dst_packer_file = f'{self.build_dir}/packer.json'
                 result = self.render_template(packer_file)
                 self.new_artifact(dst_packer_file, result)
-                count += 1
+                self.logger.info('Build completed')
+                self.logger.info('Target => packer, Artifacts => 1')
             except CompilerArtifactGenerationException as err:
                 self.abort_build(str(err))
-
-        return count
+        else:
+            self.logger.info('No packer file to compile')
+            self.logger.info('Target => packer, Artifacts => 0')
+        return 'success'
 
     def build_target_config(self):
-        count = 0
+        self.logger.info('Building target => config...')
         env_config = {}
         image_config = {}
 
@@ -287,8 +299,9 @@ class Compiler(Base):
                     **self.generate_template_variables())
                 self.logger.info('Rendering Done!')
                 self.new_artifact(f'{self.build_dir}/config.json', rendered)
-                count += 1
-                return count
+                self.logger.info('Build completed')
+                self.logger.info('Target => config, Artifacts => 1')
+                return 'success'
             except TemplateSyntaxError as err:
                 CompilerTemplateRenderingException(str(err))
         except OSError as err:
@@ -297,12 +310,14 @@ class Compiler(Base):
     def build_all(self):
         self.start_time = datetime.now()
         for name, target in self.build_targets.items():
-            self.logger.info(f'Building target => {name}...')
             result = target()
-            self.logger.info('Build completed')
-            self.logger.info(f'Target => {name}, Artifacts => {result}')
+            if not result == 'success':
+                # force the proccess to terminate if we not get
+                # success from target.
+                return 'fail'
         self.end_time = datetime.now()
         self.generate_build_info_file()
+        return 'success'
 
     def __remove_dirs_recursive(self, path):
         if os.path.exists(path):
