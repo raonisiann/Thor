@@ -338,12 +338,13 @@ class Compiler(Base):
                     self.logger.error(f'Fail to remove {entry_path}')
                     raise CompilerException(str(err))
 
-    def clean_build_dir(self):
+    def build_target_clean(self):
         self.logger.info(f'Cleaning {self.build_dir}')
         self.__remove_dirs_recursive(self.build_dir)
+        self.logger.info('Clean done!')
 
     def build(self):
-        self.clean_build_dir()
+        self.build_target_clean()
         self.__create_build_dirs()
         self.build_all()
         self.logger.info(f'Build dir ==> {self.build_dir}')
