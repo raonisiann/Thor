@@ -40,7 +40,8 @@ class Compiler(Base):
             'static': self.build_target_static,
             'packer': self.build_target_packer,
             'templates': self.build_target_templates,
-            'config': self.build_target_config
+            'config': self.build_target_config,
+            'clean': self.clean_build_dir
         }
         self.build_dir = '{base_build_dir}/{env_name}/{image_name}'.format(
             base_build_dir=Thor.BUILD_DIR,
