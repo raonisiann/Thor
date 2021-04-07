@@ -253,35 +253,53 @@ class Compiler(Base):
     def build_target_config(self):
         self.logger.info('Building target => config...')
         self.__create_build_dirs()
-        env_config = {}
-        image_config = {}
+
+        tmp_build_dir = f'{self.build_dir}/tmp'
 
         if os.path.exists(self.image.env.get_config_file()):
             with open(self.image.env.get_config_file(), 'r') as f:
-                env_config = json.loads(f.read())
+                env_config = f.read()
+            self.logger.info('Rendering env config file...')
+            template = CompilerTemplateString(self.image, tmp_build_dir,
+                                              env_config)
+            template.render('env_config.json',
+                            self.generate_template_variables())
+            self.logger.info('Rendering completed')
 
         if os.path.exists(self.image.get_config_file()):
             with open(self.image.get_config_file(), 'r') as f:
-                image_config = json.loads(f.read())
-        # image settings override environment settings
-        merged_config = json.dumps({**env_config, **image_config}, indent=4)
+                image_config = f.read()
+            self.logger.info('Rendering image config file...')
+            template = CompilerTemplateString(self.image, tmp_build_dir,
+                                              image_config)
+            template.render('image_config.json',
+                            self.generate_template_variables())
+            self.logger.info('Rendering completed')
 
-        try:
-            self.logger.info('Loading merged config')
-            try:
-                self.logger.info('Rendering...')
-                template = CompilerTemplateString(self.image, self.build_dir,
-                                                  merged_config)
-                template.render('config.json',
-                                self.generate_template_variables())
-                self.logger.info('Rendering Done!')
-                self.logger.info('Build completed')
-                self.logger.info('Target => config, Artifacts => 1')
-                return 'success'
-            except TemplateSyntaxError as err:
-                CompilerTemplateRenderingException(str(err))
-        except OSError as err:
-            CompilerTemplateRenderingException(str(err))
+        if os.path.exists(f'{tmp_build_dir}/env_config.json'):
+            with open(f'{tmp_build_dir}/env_config.json', 'r') as f:
+                rendered_env_config = json.loads(f.read())
+        else:
+            rendered_env_config = {}
+
+        if os.path.exists(f'{tmp_build_dir}/image_config.json'):
+            with open(f'{tmp_build_dir}/image_config.json', 'r') as f:
+                rendered_image_config = json.loads(f.read())
+        else:
+            rendered_image_config = {}
+
+        self.logger.info('Merging config files...')
+        # image settings override environment settings
+        merged_config = json.dumps(
+            {**rendered_env_config, **rendered_image_config}, indent=4)
+
+        self.logger.info('Saving config files...')
+        with open(f'{self.build_dir}/config.json', 'w+') as f:
+            f.write(merged_config)
+
+        self.logger.info('Build completed')
+        self.logger.info('Target => config, Artifacts => 1')
+        return 'success'
 
     def build_all(self):
         self.start_time = datetime.now()
