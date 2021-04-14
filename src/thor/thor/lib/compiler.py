@@ -354,6 +354,7 @@ class CompilerTemplate(Base):
         self.jinja_env = jinja_env
         self.jinja_env.filters['getparam'] = self.filter_get_param
         self.jinja_env.filters['include_file'] = self.filter_include_file
+        self.jinja_env.filters['get_param'] = self.filter_get_param
 
     def filter_include_file(self, file_name):
         if not os.path.exists(file_name):
