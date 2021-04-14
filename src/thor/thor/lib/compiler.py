@@ -353,6 +353,17 @@ class CompilerTemplate(Base):
         self.dst_dir = dst_dir
         self.jinja_env = jinja_env
         self.jinja_env.filters['getparam'] = self.filter_get_param
+        self.jinja_env.filters['include_file'] = self.filter_include_file
+
+    def filter_include_file(self, file_name):
+        if not os.path.exists(file_name):
+            raise RuntimeError(f'Fail to include file {file_name}')
+
+        try:
+            with open(file_name, 'r') as f:
+                return f.read()
+        except OSError as err:
+            raise RuntimeError(f'Fail to read {file_name}: {err}')
 
     def filter_get_param(self, name):
         env_name = self.image.env.get_name()
