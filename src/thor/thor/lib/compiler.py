@@ -1,3 +1,4 @@
+import base64
 import os
 import json
 
@@ -355,8 +356,18 @@ class CompilerTemplate(Base):
         self.jinja_env.filters['getparam'] = self.filter_get_param
         self.jinja_env.filters['include_file'] = self.filter_include_file
         self.jinja_env.filters['get_param'] = self.filter_get_param
-        self.jinja_env.filters['b64_encode'] = self.filter_get_param
-        self.jinja_env.filters['b64_decode'] = self.filter_get_param
+        self.jinja_env.filters['b64_encode'] = self.filter_b64_encode
+        self.jinja_env.filters['b64_decode'] = self.filter_b64_decode
+
+    def filter_b64_encode(self, plain_text):
+        plain_text_bytes = plain_text.encode()
+        encoded_bytes = base64.b64encode(plain_text_bytes)
+        return encoded_bytes.decode()
+
+    def filter_b64_decode(self, encoded_text):
+        encoded_text_bytes = encoded_text.encode()
+        decoded_bytes = base64.b64decode(encoded_text_bytes)
+        return decoded_bytes.decode()
 
     def filter_include_file(self, file_name):
         full_path_file = f'{self.compiler.build_dir}/{file_name}'
