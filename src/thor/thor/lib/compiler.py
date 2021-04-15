@@ -1,3 +1,4 @@
+import base64
 import os
 import json
 
@@ -220,7 +221,7 @@ class Compiler(Base):
             Thor.TEMPLATES_DIR,
         ]
         dest_dir = f'{self.build_dir}/templates'
-        template = CompilerTemplateDir(self.image, dest_dir, template_list)
+        template = CompilerTemplateDir(self, dest_dir, template_list)
         try:
             count = template.render_all(self.generate_template_variables())
             self.logger.info('Build completed')
@@ -237,7 +238,7 @@ class Compiler(Base):
             with open(packer_file, 'r') as f:
                 packer_file_content = f.read()
             try:
-                template = CompilerTemplateString(self.image, self.build_dir,
+                template = CompilerTemplateString(self, self.build_dir,
                                                   packer_file_content)
                 template.render('packer.json',
                                 self.generate_template_variables())
@@ -260,7 +261,7 @@ class Compiler(Base):
             with open(self.image.env.get_config_file(), 'r') as f:
                 env_config = f.read()
             self.logger.info('Rendering env config file...')
-            template = CompilerTemplateString(self.image, tmp_build_dir,
+            template = CompilerTemplateString(self, tmp_build_dir,
                                               env_config)
             template.render('env_config.json',
                             self.generate_template_variables())
@@ -270,7 +271,7 @@ class Compiler(Base):
             with open(self.image.get_config_file(), 'r') as f:
                 image_config = f.read()
             self.logger.info('Rendering image config file...')
-            template = CompilerTemplateString(self.image, tmp_build_dir,
+            template = CompilerTemplateString(self, tmp_build_dir,
                                               image_config)
             template.render('image_config.json',
                             self.generate_template_variables())
@@ -347,18 +348,43 @@ class Compiler(Base):
 
 class CompilerTemplate(Base):
 
-    def __init__(self, image, dst_dir, jinja_env):
+    def __init__(self, compiler, dst_dir, jinja_env):
         super().__init__()
-        self.image = image
+        self.compiler = compiler
         self.dst_dir = dst_dir
         self.jinja_env = jinja_env
         self.jinja_env.filters['getparam'] = self.filter_get_param
+        self.jinja_env.filters['include_file'] = self.filter_include_file
+        self.jinja_env.filters['get_param'] = self.filter_get_param
+        self.jinja_env.filters['b64_encode'] = self.filter_b64_encode
+        self.jinja_env.filters['b64_decode'] = self.filter_b64_decode
+
+    def filter_b64_encode(self, plain_text):
+        plain_text_bytes = plain_text.encode()
+        encoded_bytes = base64.b64encode(plain_text_bytes)
+        return encoded_bytes.decode()
+
+    def filter_b64_decode(self, encoded_text):
+        encoded_text_bytes = encoded_text.encode()
+        decoded_bytes = base64.b64decode(encoded_text_bytes)
+        return decoded_bytes.decode()
+
+    def filter_include_file(self, file_name):
+        full_path_file = f'{self.compiler.build_dir}/{file_name}'
+        if not os.path.exists(full_path_file):
+            raise RuntimeError(f'Fail to include file {full_path_file}')
+
+        try:
+            with open(full_path_file, 'r') as f:
+                return f.read()
+        except OSError as err:
+            raise RuntimeError(f'Fail to read {full_path_file}: {err}')
 
     def filter_get_param(self, name):
-        env_name = self.image.env.get_name()
-        image_name = self.image.get_name()
+        env_name = self.compiler.image.env.get_name()
+        image_name = self.compiler.image.get_name()
         param_full_name = f'/thor/{env_name}/{image_name}/{name}'
-        param = ParameterStore(self.image.env)
+        param = ParameterStore(self.compiler.image.env)
 
         try:
             return param.get(param_full_name)
@@ -369,8 +395,8 @@ class CompilerTemplate(Base):
 
 class CompilerTemplateString(CompilerTemplate):
 
-    def __init__(self, image, dst_dir, template_string):
-        super().__init__(image, dst_dir, Environment())
+    def __init__(self, compiler, dst_dir, template_string):
+        super().__init__(compiler, dst_dir, Environment())
         self.template_string = template_string
 
     def render(self, dst_file, variables):
@@ -397,9 +423,9 @@ class CompilerTemplateString(CompilerTemplate):
 
 class CompilerTemplateDir(CompilerTemplate):
 
-    def __init__(self, image, dst_dir, templates_dir):
+    def __init__(self, compiler, dst_dir, templates_dir):
         super().__init__(
-            image,
+            compiler,
             dst_dir,
             Environment(loader=FileSystemLoader(templates_dir)))
 
