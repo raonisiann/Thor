@@ -382,8 +382,7 @@ class CompilerTemplate(Base):
 
     def filter_get_param(self, name):
         env_name = self.compiler.image.env.get_name()
-        image_name = self.compiler.image.get_name()
-        param_full_name = f'/thor/{env_name}/{image_name}/{name}'
+        param_full_name = f'/thor/{env_name}/{name}'
         param = ParameterStore(self.compiler.image.env)
 
         try:
