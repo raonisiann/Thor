@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import os
 import json
 
@@ -358,6 +359,24 @@ class CompilerTemplate(Base):
         self.jinja_env.filters['get_param'] = self.filter_get_param
         self.jinja_env.filters['b64_encode'] = self.filter_b64_encode
         self.jinja_env.filters['b64_decode'] = self.filter_b64_decode
+        self.jinja_env.filters['sha256'] = self.filter_sha256
+        self.jinja_env.filters['sha512'] = self.filter_sha512
+        self.jinja_env.filters['md5'] = self.filter_md5
+
+    def filter_md5(self, plain_text):
+        m = hashlib.md5()
+        m.update(plain_text.encode())
+        return m.hexdigest()
+
+    def filter_sha512(self, plain_text):
+        m = hashlib.sha512()
+        m.update(plain_text.encode())
+        return m.hexdigest()
+
+    def filter_sha256(self, plain_text):
+        m = hashlib.sha256()
+        m.update(plain_text.encode())
+        return m.hexdigest()
 
     def filter_b64_encode(self, plain_text):
         plain_text_bytes = plain_text.encode()
