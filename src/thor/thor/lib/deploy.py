@@ -188,18 +188,28 @@ class DeployBlueGreen(Deploy):
             rand=random_string()
         )
 
-        if self.is_first_deploy_ever:
-            desired_capacity = Deploy.DEFAULT_DESIRED_CAPACITY
-        else:
-            current_autoscaling = self.running_resources['autoscaling']
-            try:
-                desired_capacity = current_autoscaling['DesiredCapacity']
-            except KeyError:
-                raise DeployException('Cannot find desired capacity '
-                                      'for running auto scaling.')
-
         autoscaling_config = self.image.get_config().get('scaling')
-        autoscaling_config['desired_capacity'] = desired_capacity
+
+        if 'desired_capacity' not in autoscaling_config:
+            if self.is_first_deploy_ever:
+                if 'min_size' in autoscaling_config:
+                    desired_capacity = autoscaling_config['min_size']
+                else:
+                    raise DeployException(
+                        'You must to set autoscaling min_size to config.json')
+            else:
+                current_autoscaling = self.running_resources['autoscaling']
+                try:
+                    desired_capacity = current_autoscaling['DesiredCapacity']
+                    # we force new autoscaling to have at least the
+                    # minimum size
+                    if desired_capacity < autoscaling_config['min_size']:
+                        desired_capacity = autoscaling_config['min_size']
+                except KeyError:
+                    raise DeployException('Cannot find desired capacity '
+                                          'for running auto scaling.')
+
+            autoscaling_config['desired_capacity'] = desired_capacity
 
         try:
             self.autoscaling.create(new_autoscaling_name,
